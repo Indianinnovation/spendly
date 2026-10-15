@@ -26,7 +26,7 @@ expense-tracker/
     └── js/main.js         # Vanilla JS only; currently an empty placeholder
 ```
 
-No `tests/` directory and no `expense_tracker.db` exist yet. The DB file is git-ignored and is created once the database step is built. `file.md` is a pasted terminal transcript, not documentation.
+No `tests/` directory exists yet. The DB file `spendly.db` is git-ignored and is created on app startup. `file.md` is a pasted terminal transcript, not documentation.
 
 **Where things belong:**
 - New routes → `app.py` only, no blueprints
@@ -122,7 +122,7 @@ Steps 1 (database setup) and 3–4, 7–9 are referenced in the code; Steps 2, 5
 - **Never put DB logic in route functions** — it belongs in `database/db.py`
 - **Never install new packages** mid-feature without flagging it — keep `requirements.txt` in sync
 - **Never use JS frameworks** — the frontend is intentionally vanilla
-- **`database/db.py` is currently only a comment spec** (no code) — do not assume `get_db()`, `init_db()` or `seed_db()` exist until the database step implements them
+- **`database/db.py` implements `get_db()`, `init_db()` and `seed_db()`** (Step 1) — reuse them, don't open SQLite connections elsewhere
 - **FK enforcement is manual** — SQLite foreign keys are off by default; `get_db()` must run `PRAGMA foreign_keys = ON` on every connection
 - The app runs on **port 5001**, not the Flask default 5000 — don't change this
 
@@ -130,7 +130,7 @@ Steps 1 (database setup) and 3–4, 7–9 are referenced in the code; Steps 2, 5
 
 ## Conventions for upcoming features
 
-- **Database:** file is `expense_tracker.db` (git-ignored). `init_db()` uses `CREATE TABLE IF NOT EXISTS`; `seed_db()` is for development data only. Where they are invoked (app startup vs. a CLI command) is not decided yet — confirm before wiring.
+- **Database:** file is `spendly.db` (git-ignored). `init_db()` uses `CREATE TABLE IF NOT EXISTS`; `seed_db()` inserts the demo user (demo@spendly.com / demo123) and 8 sample expenses only when `users` is empty. Both run inside `app.app_context()` on startup in `app.py`.
 - **Auth:** Flask sessions need `app.secret_key`, which is not set yet. Hash passwords with `werkzeug.security` (already a dependency); never store plaintext. Protected routes should redirect to `login` when there is no session user.
 - **Currency:** the product is rupee-based (landing page: "Track Every Rupee"). Display amounts with ₹.
-- **Tests:** place in `tests/` using pytest-flask; point tests at a temporary SQLite DB, never `expense_tracker.db`.
+- **Tests:** place in `tests/` using pytest-flask; point tests at a temporary SQLite DB, never `spendly.db`.
