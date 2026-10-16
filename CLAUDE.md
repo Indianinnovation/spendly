@@ -99,17 +99,17 @@ pytest -s
 | Route | Status |
 |---|---|
 | `GET /` | Implemented — renders `landing.html` |
-| `GET /register` | Implemented — renders `register.html` (GET only; form POST not handled yet) |
-| `GET /login` | Implemented — renders `login.html` (GET only; form POST not handled yet) |
+| `GET/POST /register` | Implemented — renders `register.html`; POST validates and creates the user |
+| `GET/POST /login` | Implemented — renders `login.html`; POST verifies credentials and sets `session["user_id"]` |
 | `GET /terms` | Implemented — renders `terms.html` |
 | `GET /privacy` | Implemented — renders `privacy.html` |
-| `GET /logout` | Stub — Step 3 |
+| `GET /logout` | Implemented — clears the session, redirects to `/login` |
 | `GET /profile` | Stub — Step 4 |
 | `GET /expenses/add` | Stub — Step 7 |
 | `GET /expenses/<id>/edit` | Stub — Step 8 |
 | `GET /expenses/<id>/delete` | Stub — Step 9 |
 
-Steps 1 (database setup) and 3–4, 7–9 are referenced in the code; Steps 2, 5 and 6 are not defined anywhere in the repo. Wiring POST handling for `/register` and `/login` is likewise unassigned — confirm the step before starting it.
+Steps 1 (database setup), 2 (registration) and 3 (login/logout) are done. Steps 4 and 7–9 are referenced in the code; Steps 5 and 6 are not defined anywhere in the repo.
 
 **Do not implement a stub route unless the active task explicitly targets that step.**
 
