@@ -19,6 +19,7 @@ expense-tracker/
 │   ├── landing.html       # Home page; contains the inline YouTube modal <script>
 │   ├── login.html
 │   ├── register.html
+│   ├── profile.html       # Profile page (identity from session user; stats/transactions are sample data)
 │   ├── terms.html
 │   └── privacy.html
 └── static/
@@ -26,7 +27,7 @@ expense-tracker/
     └── js/main.js         # Vanilla JS only; currently an empty placeholder
 ```
 
-No `tests/` directory and no `expense_tracker.db` exist yet. The DB file is git-ignored and is created once the database step is built. `file.md` is a pasted terminal transcript, not documentation.
+Tests live in `tests/` (pytest-flask, temporary DB via `conftest.py`). The DB file is git-ignored. `file.md` is a pasted terminal transcript, not documentation.
 
 **Where things belong:**
 - New routes → `app.py` only, no blueprints
@@ -104,12 +105,12 @@ pytest -s
 | `GET /terms` | Implemented — renders `terms.html` |
 | `GET /privacy` | Implemented — renders `privacy.html` |
 | `GET /logout` | Implemented — clears the session, redirects to `/login` |
-| `GET /profile` | Stub — Step 4 |
+| `GET /profile` | Implemented — renders `profile.html` with hardcoded sample data (DB wiring comes later); redirects to `/login` when signed out |
 | `GET /expenses/add` | Stub — Step 7 |
 | `GET /expenses/<id>/edit` | Stub — Step 8 |
 | `GET /expenses/<id>/delete` | Stub — Step 9 |
 
-Steps 1 (database setup), 2 (registration) and 3 (login/logout) are done. Steps 4 and 7–9 are referenced in the code; Steps 5 and 6 are not defined anywhere in the repo.
+Steps 1 (database setup), 2 (registration), 3 (login/logout) and 4 (profile page UI) are done. Steps 7–9 are referenced in the code; Steps 5 and 6 are not defined anywhere in the repo.
 
 **Do not implement a stub route unless the active task explicitly targets that step.**
 
@@ -133,4 +134,5 @@ Steps 1 (database setup), 2 (registration) and 3 (login/logout) are done. Steps 
 - **Database:** file is `expense_tracker.db` (git-ignored). `init_db()` uses `CREATE TABLE IF NOT EXISTS`; `seed_db()` is for development data only. Where they are invoked (app startup vs. a CLI command) is not decided yet — confirm before wiring.
 - **Auth:** Flask sessions need `app.secret_key`, which is not set yet. Hash passwords with `werkzeug.security` (already a dependency); never store plaintext. Protected routes should redirect to `login` when there is no session user.
 - **Currency:** the product is rupee-based (landing page: "Track Every Rupee"). Display amounts with ₹.
+- **Amounts:** format in templates with `"₹{:,.0f}".format(x)`. Bar widths use `.bar-w-N` classes (N a multiple of 5) because inline `style=` is not allowed.
 - **Tests:** place in `tests/` using pytest-flask; point tests at a temporary SQLite DB, never `expense_tracker.db`.
