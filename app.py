@@ -1,5 +1,6 @@
 import os
 import sqlite3
+from datetime import datetime
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import check_password_hash
@@ -45,7 +46,7 @@ def _is_signed_in():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if _is_signed_in():
-        return redirect(url_for("landing"))
+        return redirect(url_for("profile"))
 
     if request.method == "GET":
         return render_template("register.html")
@@ -82,7 +83,7 @@ def register():
 def login():
     if request.method == "GET":
         if _is_signed_in():
-            return redirect(url_for("landing"))
+            return redirect(url_for("profile"))
         return render_template("login.html")
 
     email = (request.form.get("email") or "").strip().lower()
@@ -100,7 +101,7 @@ def login():
 
     session.clear()
     session["user_id"] = user["id"]
-    return redirect(url_for("landing"))
+    return redirect(url_for("profile"))
 
 
 @app.route("/logout")
@@ -124,9 +125,57 @@ def privacy():
 # Placeholder routes — students will implement these                  #
 # ------------------------------------------------------------------ #
 
+def _format_member_since(raw):
+    try:
+        return datetime.strptime(raw[:10], "%Y-%m-%d").strftime("%B %Y")
+    except (TypeError, ValueError):
+        return ""
+
+
 @app.route("/profile")
 def profile():
-    return "Profile page — coming in Step 4"
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+
+    user = get_user_by_id(session["user_id"])
+
+    # Sample data — replaced by expense queries in a later step.
+    transactions = [
+        {"date": "2026-10-15", "description": "Swiggy dinner", "category": "Food", "amount": 480},
+        {"date": "2026-10-13", "description": "Metro card top-up", "category": "Transport", "amount": 500},
+        {"date": "2026-10-10", "description": "Electricity bill", "category": "Bills", "amount": 2150},
+        {"date": "2026-10-08", "description": "Running shoes", "category": "Shopping", "amount": 3299},
+        {"date": "2026-10-05", "description": "Pharmacy", "category": "Health", "amount": 640},
+    ]
+    totals = {}
+    for tx in transactions:
+        tx["badge_class"] = f"badge-{tx['category'].lower()}"
+        totals[tx["category"]] = totals.get(tx["category"], 0) + tx["amount"]
+    total_spent = sum(totals.values())
+
+    breakdown = [
+        {
+            "name": name,
+            "amount": amount,
+            "bar_class": f"bar-w-{round(amount / total_spent * 100 / 5) * 5}",
+        }
+        for name, amount in sorted(totals.items(), key=lambda item: item[1], reverse=True)
+    ]
+    stats = {
+        "total_spent": total_spent,
+        "count": len(transactions),
+        "top_category": breakdown[0]["name"],
+    }
+    initials = "".join(word[0] for word in user["name"].split()[:2]).upper() or "?"
+
+    return render_template(
+        "profile.html",
+        initials=initials,
+        member_since=_format_member_since(user["created_at"]),
+        stats=stats,
+        transactions=transactions,
+        breakdown=breakdown,
+    )
 
 
 @app.route("/expenses/add")
