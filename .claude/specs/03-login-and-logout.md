@@ -8,11 +8,11 @@ Implement session-based authentication so registered users can sign in and out o
 - Step 2 (Registration): `create_user`, `get_user_by_email`, `app.secret_key`, and the flash-message block in `login.html`.
 
 ## Routes
-- `GET /login` — render the sign-in form; if already signed in, redirect to `/profile` — public
-- `POST /login` — validate credentials, set `session["user_id"]`, redirect to `/profile` on success; on failure re-render the form with an error — public
+- `GET /login` — render the sign-in form; if already signed in, redirect to `/` — public
+- `POST /login` — validate credentials, set `session["user_id"]`, redirect to `/` on success; on failure re-render the form with an error — public
 - `GET /logout` — clear the session, flash a confirmation, redirect to `/login` — public (safe to call when not signed in)
 
-`/profile` is still a stub (Step 4); the post-login redirect targets it via `url_for("profile")`. Do not implement `/profile` or any other stub here.
+`/profile` is still a stub (Step 4), so the post-login redirect targets the landing page via `url_for("landing")` for now; switch it to `/profile` in Step 4. Do not implement `/profile` or any other stub here.
 
 ## Database changes
 No schema changes; the `users` table is sufficient.
@@ -61,7 +61,7 @@ No new dependencies (`werkzeug.security.check_password_hash` and `flask.session`
 - Use one generic error for both unknown email and wrong password: "Invalid email or password." (do not reveal which was wrong)
 - If either field is empty after trimming the email: "Email and password are required."
 - Validation failures return HTTP 200 with the form re-rendered and `error` set; no bare string returns
-- Success: `session.clear()` first (avoids session fixation), then `session["user_id"] = user["id"]`, then `redirect(url_for("profile"))`
+- Success: `session.clear()` first (avoids session fixation), then `session["user_id"] = user["id"]`, then `redirect(url_for("landing"))`
 - Store only the user id in the session — never the password hash or other user data
 - Logout: `session.clear()`, `flash("You have been signed out.")`, `redirect(url_for("login"))`
 - A session whose `user_id` no longer matches a user must behave as signed out (`current_user` is `None`)
@@ -69,14 +69,14 @@ No new dependencies (`werkzeug.security.check_password_hash` and `flask.session`
 
 ## Definition of done
 - [ ] `python app.py` starts on port 5001 with no errors
-- [ ] Signing in with the seeded demo account (`demo@spendly.com` / `demo123`) redirects to `/profile`
+- [ ] Signing in with the seeded demo account (`demo@spendly.com` / `demo123`) redirects to `/`
 - [ ] Signing in with an account created via `/register` works, including when the email is typed in a different case
 - [ ] A wrong password and an unknown email both show "Invalid email or password." with HTTP 200 and no session set
 - [ ] An empty email or password shows "Email and password are required."
 - [ ] On error, the email keeps its submitted value and the password field is empty
 - [ ] `curl -X POST http://localhost:5001/login` (no fields) returns 200 with the required-fields error, not a 400 or 500
 - [ ] After signing in, the navbar shows the user's name and a "Sign out" link, and no longer shows "Sign in" / "Get started"
-- [ ] Visiting `/login` while signed in redirects to `/profile`
+- [ ] Visiting `/login` while signed in redirects to `/`
 - [ ] Clicking "Sign out" redirects to `/login` showing "You have been signed out.", and the navbar shows "Sign in" / "Get started" again
 - [ ] The confirmation message does not reappear on refresh (flash is consumed once)
 - [ ] Visiting `/logout` while not signed in redirects to `/login` without error

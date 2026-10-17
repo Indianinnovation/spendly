@@ -22,10 +22,10 @@ def test_get_login_shows_form(client):
     assert 'action="/login"' in html
 
 
-def test_valid_login_redirects_to_profile(client, user_id):
+def test_valid_login_redirects_to_landing(client, user_id):
     response = post_login(client)
     assert response.status_code == 302
-    assert response.headers["Location"].endswith("/profile")
+    assert response.headers["Location"] == "/"
     with client.session_transaction() as sess:
         assert sess["user_id"] == user_id
 
@@ -75,7 +75,7 @@ def test_login_page_redirects_when_signed_in(client, user_id):
     post_login(client)
     response = client.get("/login")
     assert response.status_code == 302
-    assert response.headers["Location"].endswith("/profile")
+    assert response.headers["Location"] == "/"
 
 
 def test_login_page_shows_form_for_stale_session(client, app):
@@ -140,3 +140,16 @@ def test_get_user_by_id(user_id):
     assert db.get_user_by_id(user_id)["email"] == EMAIL
     assert db.get_user_by_id(999) is None
     assert db.get_user_by_id(None) is None
+
+
+def test_register_redirects_when_signed_in(client, user_id):
+    post_login(client)
+    for response in (client.get("/register"), client.post("/register")):
+        assert response.status_code == 302
+        assert response.headers["Location"] == "/"
+
+
+def test_register_shows_form_for_stale_session(client, app):
+    with client.session_transaction() as sess:
+        sess["user_id"] = 999
+    assert client.get("/register").status_code == 200

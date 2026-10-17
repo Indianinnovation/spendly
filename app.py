@@ -37,8 +37,16 @@ def _is_valid_email(email):
     return bool(local) and bool(domain) and "." in domain
 
 
+def _is_signed_in():
+    user_id = session.get("user_id")
+    return bool(user_id and get_user_by_id(user_id))
+
+
 @app.route("/register", methods=["GET", "POST"])
 def register():
+    if _is_signed_in():
+        return redirect(url_for("landing"))
+
     if request.method == "GET":
         return render_template("register.html")
 
@@ -73,9 +81,8 @@ def register():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "GET":
-        user_id = session.get("user_id")
-        if user_id and get_user_by_id(user_id):
-            return redirect(url_for("profile"))
+        if _is_signed_in():
+            return redirect(url_for("landing"))
         return render_template("login.html")
 
     email = (request.form.get("email") or "").strip().lower()
@@ -93,7 +100,7 @@ def login():
 
     session.clear()
     session["user_id"] = user["id"]
-    return redirect(url_for("profile"))
+    return redirect(url_for("landing"))
 
 
 @app.route("/logout")
