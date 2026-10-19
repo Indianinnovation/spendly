@@ -20,7 +20,7 @@
         <section class="profile-stats" aria-label="Summary">
             <div class="stat-card">
                 <span class="stat-label">Total spent</span>
-                <span class="stat-value">₹{{ "{:,.0f}".format(stats.total_spent) }}</span>
+                <span class="stat-value">₹{{ "{:,.2f}".format(stats.total_spent) }}</span>
             </div>
             <div class="stat-card">
                 <span class="stat-label">Transactions</span>
@@ -32,8 +32,9 @@
             </div>
         </section>
 
+        <div class="profile-columns">
         <section class="profile-section">
-            <h2 class="profile-section-title">Recent transactions</h2>
+            <h2 class="profile-section-title">Recent Transactions</h2>
             <div class="tx-table-wrap">
                 <table class="tx-table">
                     <thead>
@@ -47,10 +48,14 @@
                     <tbody>
                         {% for tx in transactions %}
                         <tr>
-                            <td>{{ tx.date }}</td>
+                            <td>{{ tx.date_label }}</td>
                             <td>{{ tx.description }}</td>
                             <td><span class="badge {{ tx.badge_class }}">{{ tx.category }}</span></td>
-                            <td class="tx-amount">₹{{ "{:,.0f}".format(tx.amount) }}</td>
+                            <td class="tx-amount">₹{{ "{:,.2f}".format(tx.amount) }}</td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4">No expenses yet.</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -59,21 +64,24 @@
         </section>
 
         <section class="profile-section">
-            <h2 class="profile-section-title">Spending by category</h2>
+            <h2 class="profile-section-title">By Category</h2>
             <div class="breakdown">
                 {% for item in breakdown %}
                 <div class="breakdown-item">
                     <div class="breakdown-meta">
                         <span>{{ item.name }}</span>
-                        <span class="breakdown-total">₹{{ "{:,.0f}".format(item.amount) }}</span>
+                        <span class="breakdown-total">₹{{ "{:,.2f}".format(item.amount) }}</span>
                     </div>
                     <div class="breakdown-track" aria-hidden="true">
-                        <div class="breakdown-fill {{ item.bar_class }}"></div>
+                        <div class="breakdown-fill {{ item.bar_class }} {{ item.color_class }}"></div>
                     </div>
                 </div>
+                {% else %}
+                <p>No expenses yet.</p>
                 {% endfor %}
             </div>
         </section>
+        </div>
 
     </div>
 </section>
