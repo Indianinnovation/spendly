@@ -150,3 +150,185 @@ def test_profile_has_no_inline_styles_or_hex(client, logged_in):
 def test_navbar_links_username_to_profile(client, logged_in):
     html = client.get("/profile").get_data(as_text=True)
     assert 'href="/profile" class="nav-user"' in html
+
+
+# ---------------------------------------------------------------- #
+# Date filter                                                       #
+# ---------------------------------------------------------------- #
+
+def _tbody(html):
+    return html.split("<tbody>")[1].split("</tbody>")[0]
+
+
+def test_profile_no_date_params_shows_all_time(client, logged_in, expenses):
+    html = client.get("/profile").get_data(as_text=True)
+    assert "₹5,900.00" in html
+    assert _tbody(html).count("<tr>") == 8
+    assert "filter-label" not in html
+    assert "filter-error" not in html
+
+
+def test_profile_filter_form_rendered(client, logged_in):
+    html = client.get("/profile").get_data(as_text=True)
+    assert 'name="start_date"' in html
+    assert 'name="end_date"' in html
+    assert ">Apply</button>" in html
+    for label in ("All Time", "This Month", "Last 3 Months", "Last 6 Months"):
+        assert label in html
+    assert 'class="filter-pill is-active"' in html
+    assert 'href="/profile"' in html
+
+
+def test_profile_preset_highlights_when_range_matches(client, logged_in):
+    from app import _filter_presets
+    preset = next(p for p in _filter_presets(None, None) if p["label"] == "This Month")
+    html = client.get(
+        "/profile", query_string={"start_date": preset["start"], "end_date": preset["end"]}
+    ).get_data(as_text=True)
+    active = re.findall(r'class="filter-pill is-active"[^>]*>([^<]+)<', html)
+    assert active == ["This Month"]
+
+
+def test_filter_presets_month_math():
+    from datetime import date
+    from app import _months_back_start
+    assert _months_back_start(date(2026, 4, 28), 3) == date(2026, 1, 1)
+    assert _months_back_start(date(2026, 2, 10), 3) == date(2025, 11, 1)
+    assert _months_back_start(date(2026, 1, 31), 6) == date(2025, 7, 1)
+
+
+def test_profile_start_date_only(client, logged_in, expenses):
+    html = client.get("/profile?start_date=2026-10-15").get_data(as_text=True)
+    assert "New shoes" in html
+    assert "Dinner out" in html
+    assert "Groceries" not in html
+    assert "Showing from 15 Oct 2026" in html
+
+
+def test_profile_end_date_only(client, logged_in, expenses):
+    html = client.get("/profile?end_date=2026-10-03").get_data(as_text=True)
+    assert "Groceries" in html
+    assert "Metro card recharge" in html
+    assert "Electricity bill" not in html
+    assert "Showing up to 03 Oct 2026" in html
+
+
+def test_profile_both_bounds_are_inclusive(client, logged_in, expenses):
+    html = client.get(
+        "/profile?start_date=2026-10-05&end_date=2026-10-15"
+    ).get_data(as_text=True)
+    assert "Electricity bill" in html
+    assert "New shoes" in html
+    assert "Metro card recharge" not in html
+    assert "Gift" not in html
+    assert _tbody(html).count("<tr>") == 4
+
+
+def test_profile_stats_reflect_range(client, logged_in, expenses):
+    html = client.get(
+        "/profile?start_date=2026-10-05&end_date=2026-10-15"
+    ).get_data(as_text=True)
+    assert "₹5,050.00" in html
+    assert re.search(r"Transactions</span>\s*<span class=\"stat-value\">4<", html)
+    assert re.search(r"Top category</span>\s*<span class=\"stat-value\">Shopping<", html)
+
+
+def test_profile_breakdown_reflects_range(client, logged_in, expenses):
+    html = client.get(
+        "/profile?start_date=2026-10-05&end_date=2026-10-15"
+    ).get_data(as_text=True)
+    assert html.count("breakdown-fill") == 4
+    widths = [int(w) for w in re.findall(r"bar-w-(\d+)", html)]
+    assert widths and all(w % 5 == 0 and 0 <= w <= 100 for w in widths)
+    assert max(widths) == round(2200 / 5050 * 100 / 5) * 5
+
+
+def test_profile_transactions_in_range_newest_first(client, logged_in, expenses):
+    html = client.get(
+        "/profile?start_date=2026-10-05&end_date=2026-10-15"
+    ).get_data(as_text=True)
+    dates = re.findall(r"\d{2} \w{3} 2026", _tbody(html))
+    parsed = [datetime.strptime(d, "%d %b %Y") for d in dates]
+    assert parsed == sorted(parsed, reverse=True)
+
+
+def test_profile_inputs_prefilled_with_active_range(client, logged_in, expenses):
+    html = client.get(
+        "/profile?start_date=2026-10-05&end_date=2026-10-15"
+    ).get_data(as_text=True)
+    assert 'value="2026-10-05"' in html
+    assert 'value="2026-10-15"' in html
+
+
+def test_profile_empty_range(client, logged_in, expenses):
+    html = client.get(
+        "/profile?start_date=2027-01-01&end_date=2027-01-31"
+    ).get_data(as_text=True)
+    assert "₹0.00" in html
+    assert "No transactions in this range." in html
+    assert "No expenses in this range." in html
+    assert "filter-error" not in html
+    assert "breakdown-fill" not in html
+
+
+def test_profile_invalid_date_shows_error(client, logged_in, expenses):
+    response = client.get("/profile?start_date=abc")
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "filter-error" in html
+    assert "₹5,900.00" in html
+
+
+def test_profile_invalid_bound_keeps_valid_bound(client, logged_in, expenses):
+    html = client.get(
+        "/profile?start_date=abc&end_date=2026-10-03"
+    ).get_data(as_text=True)
+    assert "filter-error" in html
+    assert "Groceries" in html
+    assert "Electricity bill" not in html
+
+
+def test_profile_start_after_end_falls_back_to_unfiltered(client, logged_in, expenses):
+    response = client.get("/profile?start_date=2026-10-20&end_date=2026-10-01")
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "filter-error" in html
+    assert "₹5,900.00" in html
+    assert "filter-label" not in html
+
+
+@pytest.mark.parametrize("payload", ["' OR '1'='1", "2026-10-01'; DROP TABLE expenses;--"])
+def test_profile_sql_injection_value_rejected(client, logged_in, expenses, payload):
+    response = client.get("/profile", query_string={"start_date": payload})
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "filter-error" in html
+    assert db.get_expense_summary(1)["count"] == 8
+
+
+def test_profile_filter_never_shows_other_users_expenses(client, logged_in, expenses):
+    other_id = db.create_user("Other Person", "other@example.com", "password1")
+    _add_expenses(other_id, [(999.0, "Food", "2026-10-10", "Secret lunch")])
+    html = client.get(
+        "/profile?start_date=2026-10-01&end_date=2026-10-31"
+    ).get_data(as_text=True)
+    assert "Secret lunch" not in html
+
+
+def test_profile_filter_requires_login(client):
+    response = client.get("/profile?start_date=2026-10-01")
+    assert response.status_code == 302
+    assert "/login" in response.headers["Location"]
+
+
+def test_db_helpers_accept_date_range(user_id, expenses):
+    assert db.get_expense_summary(1, "2026-10-05", "2026-10-15") == {
+        "total_spent": 5050.0,
+        "count": 4,
+    }
+    assert db.get_expense_summary(1, end_date="2026-10-01")["count"] == 1
+    assert len(db.get_recent_expenses(1, 10, "2026-10-12", None)) == 4
+    totals = db.get_category_totals(1, "2026-10-05", "2026-10-15")
+    assert [row["category"] for row in totals] == [
+        "Shopping", "Bills", "Entertainment", "Health",
+    ]

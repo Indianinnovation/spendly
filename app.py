@@ -1,6 +1,7 @@
 import os
+import secrets
 import sqlite3
-from datetime import datetime
+from datetime import date, datetime
 
 from flask import Flask, render_template, request, redirect, url_for, flash, session
 from werkzeug.security import check_password_hash
@@ -10,7 +11,9 @@ from database.db import (
 )
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-change-me")
+# Without SECRET_KEY a random per-process key is used: sessions stay safe from
+# forgery but are logged out on every restart. Set SECRET_KEY for persistence.
+app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 
 with app.app_context():
     init_db()
@@ -140,12 +143,69 @@ def _format_date(raw):
         return raw or ""
 
 
+def _parse_date_bound(raw):
+    raw = (raw or "").strip()
+    if not raw:
+        return None, False
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").strftime("%Y-%m-%d"), False
+    except ValueError:
+        return None, True
+
+
+def _parse_date_range(args):
+    start, start_bad = _parse_date_bound(args.get("start_date"))
+    end, end_bad = _parse_date_bound(args.get("end_date"))
+
+    if start_bad or end_bad:
+        return start, end, "Please enter dates in YYYY-MM-DD format."
+    if start and end and start > end:
+        return None, None, "Start date must be on or before the end date."
+    return start, end, None
+
+
+def _months_back_start(today, months):
+    index = today.year * 12 + today.month - 1 - months
+    return today.replace(year=index // 12, month=index % 12 + 1, day=1)
+
+
+def _filter_presets(start, end):
+    today = date.today()
+    end_iso = today.isoformat()
+    presets = [
+        ("All Time", None, None),
+        ("This Month", today.replace(day=1).isoformat(), end_iso),
+        ("Last 3 Months", _months_back_start(today, 3).isoformat(), end_iso),
+        ("Last 6 Months", _months_back_start(today, 6).isoformat(), end_iso),
+    ]
+    return [
+        {
+            "label": label,
+            "start": p_start,
+            "end": p_end,
+            "active": (p_start, p_end) == (start, end),
+        }
+        for label, p_start, p_end in presets
+    ]
+
+
+def _range_label(start, end):
+    if start and end:
+        return f"Showing {_format_date(start)} – {_format_date(end)}"
+    if start:
+        return f"Showing from {_format_date(start)}"
+    if end:
+        return f"Showing up to {_format_date(end)}"
+    return None
+
+
 @app.route("/profile")
 def profile():
     if not _is_signed_in():
         return redirect(url_for("login"))
 
     user = get_user_by_id(session["user_id"])
+    start_date, end_date, date_error = _parse_date_range(request.args)
 
     transactions = [
         {
@@ -156,10 +216,12 @@ def profile():
             "amount": row["amount"],
             "badge_class": f"badge-{row['category'].lower()}",
         }
-        for row in get_recent_expenses(user["id"])
+        for row in get_recent_expenses(
+            user["id"], start_date=start_date, end_date=end_date
+        )
     ]
 
-    category_rows = get_category_totals(user["id"])
+    category_rows = get_category_totals(user["id"], start_date, end_date)
     grand_total = sum(row["total"] for row in category_rows)
     breakdown = [
         {
@@ -171,7 +233,7 @@ def profile():
         for row in category_rows
     ] if grand_total else []
 
-    summary = get_expense_summary(user["id"])
+    summary = get_expense_summary(user["id"], start_date, end_date)
     stats = {
         "total_spent": summary["total_spent"],
         "count": summary["count"],
@@ -187,6 +249,12 @@ def profile():
         stats=stats,
         transactions=transactions,
         breakdown=breakdown,
+        start_date=start_date,
+        end_date=end_date,
+        date_error=date_error,
+        range_label=_range_label(start_date, end_date),
+        presets=_filter_presets(start_date, end_date),
+        is_filtered=bool(start_date or end_date),
     )
 
 
@@ -206,4 +274,4 @@ def delete_expense(id):
 
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5001)
+    app.run(debug=os.environ.get("FLASK_DEBUG") == "1", port=5001)
