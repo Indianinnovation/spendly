@@ -14,6 +14,8 @@
     --accent-light: #e8f0eb;
     --accent-2: #c17f24;
     --accent-2-light: #fdf3e3;
+    --purple: #8a5a8c;
+    --purple-light: #f1e8f2;
     --danger: #c0392b;
     --danger-light: #fdecea;
     --border: #e4e1da;
@@ -385,8 +387,9 @@ a { color: inherit; text-decoration: none; }
 
 .feature-card {
     background: var(--paper-card);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-soft);
     border-radius: var(--radius-md);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
     padding: 2rem;
 }
 
@@ -674,7 +677,7 @@ a { color: inherit; text-decoration: none; }
 }
 
 .profile-inner {
-    max-width: 900px;
+    max-width: var(--max-width);
     margin: 0 auto;
     display: flex;
     flex-direction: column;
@@ -753,11 +756,20 @@ a { color: inherit; text-decoration: none; }
     font-variant-numeric: tabular-nums;
 }
 
+.profile-columns {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1.5rem;
+    align-items: start;
+}
+
 .profile-section-title {
     font-family: var(--font-display);
     font-size: 1.25rem;
     color: var(--ink);
-    margin-bottom: 1.25rem;
+    padding-bottom: 1rem;
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--border-soft);
 }
 
 .tx-table-wrap { overflow-x: auto; }
@@ -807,9 +819,10 @@ a { color: inherit; text-decoration: none; }
 .badge-food { background: var(--accent-light); color: var(--accent); }
 .badge-transport { background: var(--accent-2-light); color: var(--accent-2); }
 .badge-bills { background: var(--danger-light); color: var(--danger); }
-.badge-shopping { background: var(--paper-warm); color: var(--ink-soft); }
+.badge-shopping { background: var(--accent-2-light); color: var(--accent-2); }
 .badge-health { background: var(--accent-light); color: var(--accent-2); }
-.badge-entertainment { background: var(--accent-2-light); color: var(--ink-soft); }
+.badge-entertainment { background: var(--purple-light); color: var(--purple); }
+.badge-other { background: var(--border-soft); color: var(--ink-muted); }
 
 .breakdown {
     display: flex;
@@ -842,6 +855,13 @@ a { color: inherit; text-decoration: none; }
     background: var(--accent);
     border-radius: var(--radius-sm);
 }
+
+.fill-entertainment { background: var(--purple); }
+.fill-shopping,
+.fill-transport { background: var(--accent-2); }
+.fill-bills { background: var(--danger); }
+.fill-health { background: var(--accent-2); }
+.fill-other { background: var(--ink-faint); }
 
 .bar-w-0 { width: 0%; }
 .bar-w-5 { width: 5%; }
@@ -905,6 +925,8 @@ a { color: inherit; text-decoration: none; }
     .features-inner { grid-template-columns: 1fr; }
 
     .profile-stats { grid-template-columns: 1fr; }
+
+    .profile-columns { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 600px) {
