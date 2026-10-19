@@ -17,6 +17,31 @@
             </div>
         </section>
 
+        <section class="filter-card" aria-label="Filter by date">
+            <div class="filter-bar">
+                <nav class="filter-presets" aria-label="Quick ranges">
+                    {% for preset in presets %}
+                    <a class="filter-pill{% if preset.active %} is-active{% endif %}"
+                       href="{% if preset.start %}{{ url_for('profile', start_date=preset.start, end_date=preset.end) }}{% else %}{{ url_for('profile') }}{% endif %}"
+                       {% if preset.active %}aria-current="true"{% endif %}>{{ preset.label }}</a>
+                    {% endfor %}
+                </nav>
+                <span class="filter-divider" aria-hidden="true"></span>
+                <form method="get" action="{{ url_for('profile') }}" class="filter-form">
+                    <input type="date" id="start_date" name="start_date" class="form-input" aria-label="From date" value="{{ start_date or '' }}">
+                    <span class="filter-sep">to</span>
+                    <input type="date" id="end_date" name="end_date" class="form-input" aria-label="To date" value="{{ end_date or '' }}">
+                    <button type="submit" class="filter-apply">Apply</button>
+                </form>
+            </div>
+            {% if date_error %}
+            <p class="filter-error" role="alert">{{ date_error }}</p>
+            {% endif %}
+            {% if range_label %}
+            <p class="filter-label">{{ range_label }}</p>
+            {% endif %}
+        </section>
+
         <section class="profile-stats" aria-label="Summary">
             <div class="stat-card">
                 <span class="stat-label">Total spent</span>
@@ -55,7 +80,7 @@
                         </tr>
                         {% else %}
                         <tr>
-                            <td colspan="4">No expenses yet.</td>
+                            <td colspan="4">{% if is_filtered %}No transactions in this range.{% else %}No expenses yet.{% endif %}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -77,7 +102,7 @@
                     </div>
                 </div>
                 {% else %}
-                <p>No expenses yet.</p>
+                <p>{% if is_filtered %}No expenses in this range.{% else %}No expenses yet.{% endif %}</p>
                 {% endfor %}
             </div>
         </section>

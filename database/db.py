@@ -82,38 +82,53 @@ def get_user_by_id(user_id):
         conn.close()
 
 
-def get_recent_expenses(user_id, limit=10):
+def _date_clause(user_id, start_date, end_date):
+    where = "WHERE user_id = ?"
+    params = [user_id]
+    if start_date:
+        where += " AND date >= ?"
+        params.append(start_date)
+    if end_date:
+        where += " AND date <= ?"
+        params.append(end_date)
+    return where, params
+
+
+def get_recent_expenses(user_id, limit=10, start_date=None, end_date=None):
+    where, params = _date_clause(user_id, start_date, end_date)
     conn = get_db()
     try:
         return conn.execute(
             "SELECT id, amount, category, date, description FROM expenses "
-            "WHERE user_id = ? ORDER BY date DESC, id DESC LIMIT ?",
-            (user_id, limit),
+            + where + " ORDER BY date DESC, id DESC LIMIT ?",
+            params + [limit],
         ).fetchall()
     finally:
         conn.close()
 
 
-def get_expense_summary(user_id):
+def get_expense_summary(user_id, start_date=None, end_date=None):
+    where, params = _date_clause(user_id, start_date, end_date)
     conn = get_db()
     try:
         row = conn.execute(
             "SELECT COALESCE(SUM(amount), 0) AS total_spent, COUNT(*) AS count "
-            "FROM expenses WHERE user_id = ?",
-            (user_id,),
+            "FROM expenses " + where,
+            params,
         ).fetchone()
         return {"total_spent": row["total_spent"], "count": row["count"]}
     finally:
         conn.close()
 
 
-def get_category_totals(user_id):
+def get_category_totals(user_id, start_date=None, end_date=None):
+    where, params = _date_clause(user_id, start_date, end_date)
     conn = get_db()
     try:
         return conn.execute(
             "SELECT category, SUM(amount) AS total FROM expenses "
-            "WHERE user_id = ? GROUP BY category ORDER BY total DESC, category",
-            (user_id,),
+            + where + " GROUP BY category ORDER BY total DESC, category",
+            params,
         ).fetchall()
     finally:
         conn.close()
