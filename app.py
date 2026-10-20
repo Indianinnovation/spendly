@@ -1,3 +1,4 @@
+import math
 import os
 import secrets
 import sqlite3
@@ -8,7 +9,12 @@ from werkzeug.security import check_password_hash
 from database.db import (
     get_db, init_db, seed_db, create_user, get_user_by_email, get_user_by_id,
     get_recent_expenses, get_expense_summary, get_category_totals,
+    create_expense, CATEGORIES,
 )
+
+MAX_AMOUNT = 1_000_000
+MAX_DESCRIPTION_LENGTH = 200
+EXPENSE_FIELDS = ("amount", "category", "date", "description")
 
 app = Flask(__name__)
 # Without SECRET_KEY a random per-process key is used: sessions stay safe from
@@ -258,9 +264,63 @@ def profile():
     )
 
 
-@app.route("/expenses/add")
+def _is_valid_date(raw):
+    try:
+        return datetime.strptime(raw, "%Y-%m-%d").strftime("%Y-%m-%d") == raw
+    except ValueError:
+        return False
+
+
+def _render_expense_form(form, error=None):
+    return render_template(
+        "add_expense.html", form=form, error=error, categories=CATEGORIES
+    )
+
+
+def _validate_expense_form(form):
+    """Return (amount, error); error is None when the form is valid."""
+    if not form["amount"]:
+        return None, "Amount is required."
+    try:
+        amount = float(form["amount"])
+    except ValueError:
+        return None, "Amount must be a number."
+    if not math.isfinite(amount) or amount <= 0:
+        return None, "Amount must be greater than zero."
+    if amount > MAX_AMOUNT:
+        return None, f"Amount must not exceed ₹{MAX_AMOUNT:,}."
+    if form["category"] not in CATEGORIES:
+        return None, "Please choose a category."
+    if not _is_valid_date(form["date"]):
+        return None, "Please enter a date in YYYY-MM-DD format."
+    if len(form["description"]) > MAX_DESCRIPTION_LENGTH:
+        return None, f"Description must be {MAX_DESCRIPTION_LENGTH} characters or fewer."
+    return round(amount, 2), None
+
+
+@app.route("/expenses/add", methods=["GET", "POST"])
 def add_expense():
-    return "Add expense — coming in Step 7"
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+
+    if request.method == "GET":
+        blank = dict.fromkeys(EXPENSE_FIELDS, "")
+        return _render_expense_form({**blank, "date": date.today().isoformat()})
+
+    form = {name: (request.form.get(name) or "").strip() for name in EXPENSE_FIELDS}
+    amount, error = _validate_expense_form(form)
+    if error:
+        return _render_expense_form(form, error)
+
+    create_expense(
+        user_id=session["user_id"],
+        amount=amount,
+        category=form["category"],
+        expense_date=form["date"],
+        description=form["description"] or None,
+    )
+    flash("Expense added.")
+    return redirect(url_for("profile"))
 
 
 @app.route("/expenses/<int:id>/edit")

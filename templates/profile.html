@@ -6,6 +6,10 @@
 <section class="profile-page">
     <div class="profile-inner">
 
+        {% for message in get_flashed_messages() %}
+        <div class="auth-success">{{ message }}</div>
+        {% endfor %}
+
         <section class="profile-card">
             <div class="profile-avatar" aria-hidden="true">{{ initials }}</div>
             <div>
@@ -59,7 +63,10 @@
 
         <div class="profile-columns">
         <section class="profile-section">
-            <h2 class="profile-section-title">Recent Transactions</h2>
+            <div class="section-header">
+                <h2 class="profile-section-title">Recent Transactions</h2>
+                <a class="section-link" href="{{ url_for('add_expense') }}">Add expense</a>
+            </div>
             <div class="tx-table-wrap">
                 <table class="tx-table">
                     <thead>

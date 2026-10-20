@@ -131,8 +131,8 @@ Steps 1 (database setup), 2 (registration), 3 (login/logout) and 4 (profile page
 
 ## Conventions for upcoming features
 
-- **Database:** file is `expense_tracker.db` (git-ignored). `init_db()` uses `CREATE TABLE IF NOT EXISTS`; `seed_db()` is for development data only. Where they are invoked (app startup vs. a CLI command) is not decided yet — confirm before wiring.
+- **Database:** file is `spendly.db` (git-ignored). `init_db()` uses `CREATE TABLE IF NOT EXISTS`; `seed_db()` is for development data only. Where they are invoked (app startup vs. a CLI command) is not decided yet — confirm before wiring.
 - **Auth:** Flask sessions need `app.secret_key`, which is not set yet. Hash passwords with `werkzeug.security` (already a dependency); never store plaintext. Protected routes should redirect to `login` when there is no session user.
 - **Currency:** the product is rupee-based (landing page: "Track Every Rupee"). Display amounts with ₹.
 - **Amounts:** format in templates with `"₹{:,.0f}".format(x)`. Bar widths use `.bar-w-N` classes (N a multiple of 5) because inline `style=` is not allowed.
-- **Tests:** place in `tests/` using pytest-flask; point tests at a temporary SQLite DB, never `expense_tracker.db`.
+- **Tests:** place in `tests/` using pytest-flask; point tests at a temporary SQLite DB, never `spendly.db`.
