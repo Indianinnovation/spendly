@@ -9,6 +9,16 @@ DB_PATH = os.path.join(
     "spendly.db",
 )
 
+CATEGORIES = [
+    "Food",
+    "Transport",
+    "Bills",
+    "Health",
+    "Entertainment",
+    "Shopping",
+    "Other",
+]
+
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -78,6 +88,20 @@ def get_user_by_id(user_id):
         return conn.execute(
             "SELECT * FROM users WHERE id = ?", (user_id,)
         ).fetchone()
+    finally:
+        conn.close()
+
+
+def create_expense(user_id, amount, category, expense_date, description):
+    conn = get_db()
+    try:
+        cursor = conn.execute(
+            "INSERT INTO expenses (user_id, amount, category, date, description) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (user_id, amount, category, expense_date, description),
+        )
+        conn.commit()
+        return cursor.lastrowid
     finally:
         conn.close()
 
