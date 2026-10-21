@@ -31,17 +31,55 @@ from database.db import (
     get_expense,
     update_expense,
     delete_expense as delete_expense_row,
+    create_debt,
+    get_debts,
+    get_debt,
+    update_debt,
+    delete_debt as delete_debt_row,
+    count_debts,
+    get_debt_settings,
+    save_debt_settings,
     CATEGORIES,
+    DEBT_TYPES,
+)
+from planner import (
+    BASELINE,
+    MAX_YEARS,
+    STRATEGIES,
+    STRATEGY_LABELS,
+    build_chart,
+    compare,
+    format_rupees,
+    has_priorities,
+    interest_warnings,
+    order_debts,
+    simulate,
 )
 
 MAX_AMOUNT = 1_000_000
 MAX_DESCRIPTION_LENGTH = 200
 EXPENSE_FIELDS = ("amount", "category", "date", "description")
+MAX_DEBT_AMOUNT = 100_000_000
+MAX_DEBT_NAME_LENGTH = 60
+# Each planner view runs several 600-month simulations over every debt,
+# so the debt count is capped to keep a request's cost bounded.
+MAX_DEBTS_PER_USER = 50
+DEBT_FIELDS = (
+    "name",
+    "debt_type",
+    "balance",
+    "apr",
+    "min_payment",
+    "due_day",
+    "priority",
+)
 
 app = Flask(__name__)
 # Without SECRET_KEY a random per-process key is used: sessions stay safe from
 # forgery but are logged out on every restart. Set SECRET_KEY for persistence.
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
+# Lax stops other sites' cross-site POSTs from carrying the session cookie.
+app.config.update(SESSION_COOKIE_SAMESITE="Lax", SESSION_COOKIE_HTTPONLY=True)
 
 with app.app_context():
     init_db()
@@ -388,18 +426,28 @@ def _read_expense_form():
     return {name: (request.form.get(name) or "").strip() for name in EXPENSE_FIELDS}
 
 
+def _parse_number(raw, label):
+    """Return (value, error) for a required finite number rounded to 2 dp.
+
+    Rounding happens before any range check, so values like 0.001 can't
+    pass as a zero amount.
+    """
+    if not raw:
+        return None, f"{label} is required."
+    try:
+        value = float(raw)
+    except ValueError:
+        return None, f"{label} must be a number."
+    if not math.isfinite(value):
+        return None, f"{label} must be a number."
+    return round(value, 2), None
+
+
 def _validate_expense_form(form):
     """Return (amount, error); error is None when the form is valid."""
-    if not form["amount"]:
-        return None, "Amount is required."
-    try:
-        amount = float(form["amount"])
-    except ValueError:
-        return None, "Amount must be a number."
-    if not math.isfinite(amount):
-        return None, "Amount must be a number."
-    # Round first so values like 0.001 can't pass as a zero amount.
-    amount = round(amount, 2)
+    amount, error = _parse_number(form["amount"], "Amount")
+    if error:
+        return None, error
     if amount <= 0:
         return None, "Amount must be greater than zero."
     if amount > MAX_AMOUNT:
@@ -490,6 +538,291 @@ def delete_expense(id):
         abort(404)
     flash("Expense deleted.")
     return redirect(url_for("profile"))
+
+
+# ------------------------------------------------------------------ #
+# Debt payoff planner                                                 #
+# ------------------------------------------------------------------ #
+
+
+def _parse_optional_int(raw, label, low, high):
+    """Return (value, error); a blank field is None."""
+    if not raw:
+        return None, None
+    try:
+        value = int(raw)
+    except ValueError:
+        value = None
+    if value is None or not low <= value <= high:
+        return None, f"{label} must be a whole number from {low} to {high}."
+    return value, None
+
+
+def _read_debt_form():
+    return {name: (request.form.get(name) or "").strip() for name in DEBT_FIELDS}
+
+
+def _validate_debt_form(form):
+    """Return (debt, error); error is None when the form is valid."""
+    if not form["name"]:
+        return None, "Name is required."
+    if len(form["name"]) > MAX_DEBT_NAME_LENGTH:
+        return None, f"Name must be {MAX_DEBT_NAME_LENGTH} characters or fewer."
+    if form["debt_type"] not in DEBT_TYPES:
+        return None, "Please choose a debt type."
+
+    balance, error = _parse_number(form["balance"], "Balance")
+    if error:
+        return None, error
+    if balance <= 0:
+        return None, "Balance must be greater than zero."
+    if balance > MAX_DEBT_AMOUNT:
+        return None, f"Balance must not exceed ₹{MAX_DEBT_AMOUNT:,}."
+
+    apr, error = _parse_number(form["apr"], "APR")
+    if error:
+        return None, error
+    if not 0 <= apr <= 100:
+        return None, "APR must be between 0 and 100."
+
+    min_payment, error = _parse_number(form["min_payment"], "Minimum payment")
+    if error:
+        return None, error
+    if min_payment <= 0:
+        return None, "Minimum payment must be greater than zero."
+    if min_payment > MAX_DEBT_AMOUNT:
+        return None, f"Minimum payment must not exceed ₹{MAX_DEBT_AMOUNT:,}."
+
+    due_day, error = _parse_optional_int(form["due_day"], "Due day", 1, 31)
+    if error:
+        return None, error
+    priority, error = _parse_optional_int(form["priority"], "Priority", 1, 99)
+    if error:
+        return None, error
+
+    return {
+        "name": form["name"],
+        "debt_type": form["debt_type"],
+        "balance": balance,
+        "apr": apr,
+        "min_payment": min_payment,
+        "due_day": due_day,
+        "priority": priority,
+    }, None
+
+
+def _validate_debt_settings(form):
+    """Return ((extra_payment, strategy), error)."""
+    extra, error = _parse_number(form["extra_payment"], "Extra payment")
+    if error:
+        return None, error
+    if extra < 0:
+        return None, "Extra payment cannot be negative."
+    if extra > MAX_DEBT_AMOUNT:
+        return None, f"Extra payment must not exceed ₹{MAX_DEBT_AMOUNT:,}."
+    if form["strategy"] not in STRATEGIES:
+        return None, "Please choose a strategy."
+    return (extra, form["strategy"]), None
+
+
+def _build_debt_rows(debt_list, plan):
+    payoff = {item["debt_id"]: item["date"] for item in plan["payoff_order"]}
+    rows = []
+    for debt in order_debts(debt_list, plan["strategy"]):
+        original = debt["original_balance"]
+        paid = (
+            (original - debt["balance"]) / original * 100 if original > 0 else 100
+        )
+        paid = min(100, max(0, paid))
+        if debt["balance"] <= 0:
+            payoff_label = "Paid off"
+        else:
+            payoff_label = payoff.get(debt["id"], "Not payable")
+        rows.append(
+            {
+                "id": debt["id"],
+                "name": debt["name"],
+                "debt_type": debt["debt_type"],
+                "badge_class": "badge-" + debt["debt_type"].lower().replace(" ", "-"),
+                "balance": format_rupees(debt["balance"]),
+                "apr": f"{debt['apr']:g}%",
+                "min_payment": format_rupees(debt["min_payment"]),
+                "payoff": payoff_label,
+                "paid_pct": round(paid),
+                "bar_class": f"bar-w-{round(paid / 5) * 5}",
+            }
+        )
+    return rows
+
+
+def _build_planner_summary(debt_list, plan, baseline):
+    saved = max(0, baseline["total_interest"] - plan["total_interest"])
+    return {
+        "total_debt": format_rupees(sum(debt["balance"] for debt in debt_list)),
+        "debt_free_date": plan["debt_free_date"]
+        or ("—" if plan["paid_off"] else "Not payable at current payments"),
+        "total_interest": format_rupees(plan["total_interest"]),
+        "interest_saved": format_rupees(saved),
+    }
+
+
+def _build_comparison_rows(comparison):
+    rows = []
+    for result in comparison:
+        # A plan that hits the month cap is still running when it stops.
+        suffix = "" if result["paid_off"] else "+"
+        rows.append(
+            {
+                "label": result["label"],
+                "months": f"{result['months']}{suffix} months",
+                "debt_free_date": result["debt_free_date"] or "Not payable",
+                "total_interest": format_rupees(result["total_interest"]),
+                "interest_saved": format_rupees(result["interest_saved"]),
+            }
+        )
+    return rows
+
+
+def _render_planner(user_id, strategy=None, settings_form=None, settings_error=None):
+    settings = get_debt_settings(user_id)
+    if strategy not in STRATEGIES:
+        strategy = settings["strategy"]
+    debt_list = [dict(row) for row in get_debts(user_id)]
+    extra = settings["extra_payment"]
+
+    comparison = compare(debt_list, extra)
+    by_strategy = {result["strategy"]: result for result in comparison}
+    # compare() skips Custom when no debt has a priority, so simulate it here.
+    plan = by_strategy.get(strategy) or simulate(debt_list, extra, strategy)
+    names = {debt["id"]: debt["name"] for debt in debt_list}
+
+    if settings_form is None:
+        settings_form = {
+            "extra_payment": f"{extra:.2f}",
+            "strategy": settings["strategy"],
+        }
+
+    return render_template(
+        "debts.html",
+        has_debts=bool(debt_list),
+        strategy=strategy,
+        strategies=list(STRATEGY_LABELS.items()),
+        custom_without_priorities=strategy == "custom"
+        and not has_priorities(debt_list),
+        summary=_build_planner_summary(debt_list, plan, by_strategy[BASELINE]),
+        debt_rows=_build_debt_rows(debt_list, plan),
+        comparison=_build_comparison_rows(comparison),
+        chart=build_chart(plan["series"], names, plan["labels"]),
+        warnings=interest_warnings(debt_list),
+        unpayable=bool(debt_list) and not plan["paid_off"],
+        max_years=MAX_YEARS,
+        settings_form=settings_form,
+        settings_error=settings_error,
+    )
+
+
+def _debt_to_form(debt):
+    return {
+        "name": debt["name"],
+        "debt_type": debt["debt_type"],
+        "balance": f"{debt['balance']:.2f}",
+        "apr": f"{debt['apr']:g}",
+        "min_payment": f"{debt['min_payment']:.2f}",
+        "due_day": "" if debt["due_day"] is None else str(debt["due_day"]),
+        "priority": "" if debt["priority"] is None else str(debt["priority"]),
+    }
+
+
+def _render_debt_form(template, form, error=None, debt_id=None):
+    return render_template(
+        template, form=form, error=error, debt_types=DEBT_TYPES, debt_id=debt_id
+    )
+
+
+@app.route("/debts")
+def debts():
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+    return _render_planner(session["user_id"], request.args.get("strategy"))
+
+
+@app.route("/debts/add", methods=["GET", "POST"])
+def add_debt():
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+
+    if request.method == "GET":
+        return _render_debt_form("add_debt.html", dict.fromkeys(DEBT_FIELDS, ""))
+
+    form = _read_debt_form()
+    debt, error = _validate_debt_form(form)
+    if not error and count_debts(session["user_id"]) >= MAX_DEBTS_PER_USER:
+        error = f"You can track up to {MAX_DEBTS_PER_USER} debts."
+    if error:
+        return _render_debt_form("add_debt.html", form, error)
+
+    create_debt(user_id=session["user_id"], **debt)
+    flash("Debt added.")
+    return redirect(url_for("debts"))
+
+
+@app.route("/debts/<int:debt_id>/edit", methods=["GET", "POST"])
+def edit_debt(debt_id):
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+
+    debt = get_debt(debt_id, session["user_id"])
+    if debt is None:
+        abort(404)
+
+    if request.method == "GET":
+        return _render_debt_form(
+            "edit_debt.html", _debt_to_form(debt), debt_id=debt_id
+        )
+
+    form = _read_debt_form()
+    clean, error = _validate_debt_form(form)
+    if error:
+        return _render_debt_form("edit_debt.html", form, error, debt_id)
+
+    # The row can vanish between the lookup above and this update.
+    if not update_debt(debt_id=debt_id, user_id=session["user_id"], **clean):
+        abort(404)
+    flash("Debt updated.")
+    return redirect(url_for("debts"))
+
+
+@app.route("/debts/<int:debt_id>/delete", methods=["POST"])
+def delete_debt(debt_id):
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+    if get_debt(debt_id, session["user_id"]) is None:
+        abort(404)
+    if not delete_debt_row(debt_id, session["user_id"]):
+        # The row can vanish between the lookup above and this delete.
+        abort(404)
+    flash("Debt deleted.")
+    return redirect(url_for("debts"))
+
+
+@app.route("/debts/settings", methods=["POST"])
+def debt_settings():
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+
+    form = {
+        name: (request.form.get(name) or "").strip()
+        for name in ("extra_payment", "strategy")
+    }
+    settings, error = _validate_debt_settings(form)
+    if error:
+        return _render_planner(
+            session["user_id"], settings_form=form, settings_error=error
+        )
+
+    save_debt_settings(session["user_id"], *settings)
+    flash("Plan updated.")
+    return redirect(url_for("debts"))
 
 
 if __name__ == "__main__":

@@ -19,6 +19,15 @@ CATEGORIES = [
     "Other",
 ]
 
+DEBT_TYPES = [
+    "Credit Card",
+    "Personal Loan",
+    "Car Loan",
+    "Education Loan",
+    "Home Loan",
+    "Other",
+]
+
 
 def get_db():
     conn = sqlite3.connect(DB_PATH)
@@ -48,6 +57,39 @@ def init_db():
                 date        TEXT NOT NULL,
                 description TEXT,
                 created_at  TEXT DEFAULT (datetime('now'))
+            )
+            """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS debts (
+                id               INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id          INTEGER NOT NULL REFERENCES users(id),
+                name             TEXT NOT NULL,
+                debt_type        TEXT NOT NULL,
+                original_balance REAL NOT NULL,
+                balance          REAL NOT NULL,
+                apr              REAL NOT NULL,
+                min_payment      REAL NOT NULL,
+                due_day          INTEGER,
+                priority         INTEGER,
+                created_at       TEXT DEFAULT (datetime('now'))
+            )
+            """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS debt_payments (
+                id         INTEGER PRIMARY KEY AUTOINCREMENT,
+                debt_id    INTEGER NOT NULL REFERENCES debts(id) ON DELETE CASCADE,
+                user_id    INTEGER NOT NULL REFERENCES users(id),
+                amount     REAL NOT NULL,
+                paid_on    TEXT NOT NULL,
+                note       TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+            """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS debt_settings (
+                user_id       INTEGER PRIMARY KEY REFERENCES users(id),
+                extra_payment REAL NOT NULL DEFAULT 0,
+                strategy      TEXT NOT NULL DEFAULT 'avalanche'
             )
             """)
         conn.commit()
@@ -133,6 +175,122 @@ def delete_expense(expense_id, user_id):
         )
         conn.commit()
         return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+DEBT_COLUMNS = (
+    "id, name, debt_type, original_balance, balance, apr, min_payment, "
+    "due_day, priority"
+)
+
+
+def create_debt(
+    user_id, name, debt_type, balance, apr, min_payment, due_day, priority
+):
+    conn = get_db()
+    try:
+        cursor = conn.execute(
+            "INSERT INTO debts (user_id, name, debt_type, original_balance, balance, "
+            "apr, min_payment, due_day, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (user_id, name, debt_type, balance, balance, apr, min_payment, due_day,
+             priority),
+        )
+        conn.commit()
+        return cursor.lastrowid
+    finally:
+        conn.close()
+
+
+def get_debts(user_id):
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT " + DEBT_COLUMNS + " FROM debts WHERE user_id = ? ORDER BY id",
+            (user_id,),
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def count_debts(user_id):
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT COUNT(*) FROM debts WHERE user_id = ?", (user_id,)
+        ).fetchone()[0]
+    finally:
+        conn.close()
+
+
+def get_debt(debt_id, user_id):
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT " + DEBT_COLUMNS + " FROM debts WHERE id = ? AND user_id = ?",
+            (debt_id, user_id),
+        ).fetchone()
+    finally:
+        conn.close()
+
+
+def update_debt(
+    debt_id, user_id, name, debt_type, balance, apr, min_payment, due_day, priority
+):
+    conn = get_db()
+    try:
+        # Raising the balance above the original also raises the original,
+        # so progress never goes negative.
+        cursor = conn.execute(
+            "UPDATE debts SET name = ?, debt_type = ?, balance = ?, "
+            "original_balance = MAX(original_balance, ?), apr = ?, min_payment = ?, "
+            "due_day = ?, priority = ? WHERE id = ? AND user_id = ?",
+            (name, debt_type, balance, balance, apr, min_payment, due_day, priority,
+             debt_id, user_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def delete_debt(debt_id, user_id):
+    conn = get_db()
+    try:
+        cursor = conn.execute(
+            "DELETE FROM debts WHERE id = ? AND user_id = ?",
+            (debt_id, user_id),
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+    finally:
+        conn.close()
+
+
+def get_debt_settings(user_id):
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT extra_payment, strategy FROM debt_settings WHERE user_id = ?",
+            (user_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return {"extra_payment": 0.0, "strategy": "avalanche"}
+    return {"extra_payment": row["extra_payment"], "strategy": row["strategy"]}
+
+
+def save_debt_settings(user_id, extra_payment, strategy):
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO debt_settings (user_id, extra_payment, strategy) "
+            "VALUES (?, ?, ?) ON CONFLICT(user_id) DO UPDATE SET "
+            "extra_payment = excluded.extra_payment, strategy = excluded.strategy",
+            (user_id, extra_payment, strategy),
+        )
+        conn.commit()
     finally:
         conn.close()
 
