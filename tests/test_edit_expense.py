@@ -534,15 +534,14 @@ def test_post_edit_sql_injection_in_description_is_stored_literally(
     assert _row(expense_id)["description"] == payload
 
 
-# --- Delete stub unchanged -------------------------------------------------
+# --- Delete is POST-only ---------------------------------------------------
 
 
-def test_delete_stub_still_returns_coming_in_step_9(client, expense_id):
+def test_delete_get_is_not_allowed(client, expense_id):
     response = client.get(f"/expenses/{expense_id}/delete")
-    assert response.status_code == 200
-    assert "Delete expense — coming in Step 9" in response.get_data(as_text=True)
+    assert response.status_code == 405
 
 
-def test_delete_stub_does_not_remove_expense(client, logged_in, expense_id):
+def test_delete_get_does_not_remove_expense(client, logged_in, expense_id):
     client.get(f"/expenses/{expense_id}/delete")
     assert _row(expense_id) is not None

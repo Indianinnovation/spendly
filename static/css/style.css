@@ -935,6 +935,24 @@ select.form-input { cursor: pointer; }
 
 .tx-action a:hover { text-decoration: underline; }
 
+.tx-delete-form {
+    display: inline;
+    margin-left: 0.75rem;
+}
+
+.tx-delete-btn {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--danger);
+}
+
+.tx-delete-btn:hover { text-decoration: underline; }
+
 .badge {
     display: inline-block;
     padding: 0.2rem 0.7rem;
