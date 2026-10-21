@@ -922,6 +922,19 @@ select.form-input { cursor: pointer; }
     white-space: nowrap;
 }
 
+.tx-table .tx-action {
+    text-align: right;
+    white-space: nowrap;
+}
+
+.tx-action a {
+    color: var(--accent);
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.tx-action a:hover { text-decoration: underline; }
+
 .badge {
     display: inline-block;
     padding: 0.2rem 0.7rem;
