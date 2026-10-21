@@ -43,7 +43,9 @@ app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 
 with app.app_context():
     init_db()
-    seed_db()
+    # Skip the demo account (known password) on deployed environments.
+    if not os.environ.get("RAILWAY_ENVIRONMENT"):
+        seed_db()
 
 
 @app.context_processor
