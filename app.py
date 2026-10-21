@@ -4,12 +4,31 @@ import secrets
 import sqlite3
 from datetime import date, datetime
 
-from flask import Flask, render_template, request, redirect, url_for, flash, session
+from flask import (
+    Flask,
+    abort,
+    render_template,
+    request,
+    redirect,
+    url_for,
+    flash,
+    session,
+)
 from werkzeug.security import check_password_hash
 from database.db import (
-    get_db, init_db, seed_db, create_user, get_user_by_email, get_user_by_id,
-    get_recent_expenses, get_expense_summary, get_category_totals,
-    create_expense, CATEGORIES,
+    get_db,
+    init_db,
+    seed_db,
+    create_user,
+    get_user_by_email,
+    get_user_by_id,
+    get_recent_expenses,
+    get_expense_summary,
+    get_category_totals,
+    create_expense,
+    get_expense,
+    update_expense,
+    CATEGORIES,
 )
 
 MAX_AMOUNT = 1_000_000
@@ -35,6 +54,7 @@ def inject_current_user():
 # ------------------------------------------------------------------ #
 # Routes                                                              #
 # ------------------------------------------------------------------ #
+
 
 @app.route("/")
 def landing():
@@ -135,6 +155,7 @@ def privacy():
 # Profile and expense routes                                          #
 # ------------------------------------------------------------------ #
 
+
 def _format_member_since(raw):
     try:
         return datetime.strptime(raw[:10], "%Y-%m-%d").strftime("%B %Y")
@@ -215,6 +236,7 @@ def profile():
 
     transactions = [
         {
+            "id": row["id"],
             "date": row["date"],
             "date_label": _format_date(row["date"]),
             "description": row["description"] or "",
@@ -229,15 +251,19 @@ def profile():
 
     category_rows = get_category_totals(user["id"], start_date, end_date)
     grand_total = sum(row["total"] for row in category_rows)
-    breakdown = [
-        {
-            "name": row["category"],
-            "amount": row["total"],
-            "bar_class": f"bar-w-{round(row['total'] / grand_total * 100 / 5) * 5}",
-            "color_class": f"fill-{row['category'].lower()}",
-        }
-        for row in category_rows
-    ] if grand_total else []
+    breakdown = (
+        [
+            {
+                "name": row["category"],
+                "amount": row["total"],
+                "bar_class": f"bar-w-{round(row['total'] / grand_total * 100 / 5) * 5}",
+                "color_class": f"fill-{row['category'].lower()}",
+            }
+            for row in category_rows
+        ]
+        if grand_total
+        else []
+    )
 
     summary = get_expense_summary(user["id"], start_date, end_date)
     stats = {
@@ -277,6 +303,20 @@ def _render_expense_form(form, error=None):
     )
 
 
+def _render_edit_form(form, expense_id, error=None):
+    return render_template(
+        "edit_expense.html",
+        form=form,
+        error=error,
+        categories=CATEGORIES,
+        expense_id=expense_id,
+    )
+
+
+def _read_expense_form():
+    return {name: (request.form.get(name) or "").strip() for name in EXPENSE_FIELDS}
+
+
 def _validate_expense_form(form):
     """Return (amount, error); error is None when the form is valid."""
     if not form["amount"]:
@@ -285,7 +325,11 @@ def _validate_expense_form(form):
         amount = float(form["amount"])
     except ValueError:
         return None, "Amount must be a number."
-    if not math.isfinite(amount) or amount <= 0:
+    if not math.isfinite(amount):
+        return None, "Amount must be a number."
+    # Round first so values like 0.001 can't pass as a zero amount.
+    amount = round(amount, 2)
+    if amount <= 0:
         return None, "Amount must be greater than zero."
     if amount > MAX_AMOUNT:
         return None, f"Amount must not exceed ₹{MAX_AMOUNT:,}."
@@ -294,8 +338,11 @@ def _validate_expense_form(form):
     if not _is_valid_date(form["date"]):
         return None, "Please enter a date in YYYY-MM-DD format."
     if len(form["description"]) > MAX_DESCRIPTION_LENGTH:
-        return None, f"Description must be {MAX_DESCRIPTION_LENGTH} characters or fewer."
-    return round(amount, 2), None
+        return (
+            None,
+            f"Description must be {MAX_DESCRIPTION_LENGTH} characters or fewer.",
+        )
+    return amount, None
 
 
 @app.route("/expenses/add", methods=["GET", "POST"])
@@ -307,7 +354,7 @@ def add_expense():
         blank = dict.fromkeys(EXPENSE_FIELDS, "")
         return _render_expense_form({**blank, "date": date.today().isoformat()})
 
-    form = {name: (request.form.get(name) or "").strip() for name in EXPENSE_FIELDS}
+    form = _read_expense_form()
     amount, error = _validate_expense_form(form)
     if error:
         return _render_expense_form(form, error)
@@ -323,9 +370,42 @@ def add_expense():
     return redirect(url_for("profile"))
 
 
-@app.route("/expenses/<int:id>/edit")
+@app.route("/expenses/<int:id>/edit", methods=["GET", "POST"])
 def edit_expense(id):
-    return "Edit expense — coming in Step 8"
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+
+    expense = get_expense(id, session["user_id"])
+    if expense is None:
+        abort(404)
+
+    if request.method == "GET":
+        form = {
+            "amount": f"{expense['amount']:.2f}",
+            "category": expense["category"],
+            "date": expense["date"],
+            "description": expense["description"] or "",
+        }
+        return _render_edit_form(form, id)
+
+    form = _read_expense_form()
+    amount, error = _validate_expense_form(form)
+    if error:
+        return _render_edit_form(form, id, error)
+
+    updated = update_expense(
+        expense_id=id,
+        user_id=session["user_id"],
+        amount=amount,
+        category=form["category"],
+        expense_date=form["date"],
+        description=form["description"] or None,
+    )
+    # The row can vanish between the lookup above and this update.
+    if not updated:
+        abort(404)
+    flash("Expense updated.")
+    return redirect(url_for("profile"))
 
 
 @app.route("/expenses/<int:id>/delete")
