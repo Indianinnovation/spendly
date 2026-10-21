@@ -39,6 +39,9 @@ from database.db import (
     count_debts,
     get_debt_settings,
     save_debt_settings,
+    log_debt_payment,
+    get_debt_payments,
+    delete_debt_payment,
     CATEGORIES,
     DEBT_TYPES,
 )
@@ -64,6 +67,8 @@ MAX_DEBT_NAME_LENGTH = 60
 # Each planner view runs several 600-month simulations over every debt,
 # so the debt count is capped to keep a request's cost bounded.
 MAX_DEBTS_PER_USER = 50
+PAYMENT_FIELDS = ("amount", "paid_on", "note")
+MAX_PAYMENT_NOTE_LENGTH = 200
 DEBT_FIELDS = (
     "name",
     "debt_type",
@@ -625,15 +630,19 @@ def _validate_debt_settings(form):
     return (extra, form["strategy"]), None
 
 
+def _paid_progress(debt):
+    """Return (percent paid, bar class) for a debt's progress bar."""
+    original = debt["original_balance"]
+    paid = (original - debt["balance"]) / original * 100 if original > 0 else 100
+    paid = min(100, max(0, paid))
+    return round(paid), f"bar-w-{round(paid / 5) * 5}"
+
+
 def _build_debt_rows(debt_list, plan):
     payoff = {item["debt_id"]: item["date"] for item in plan["payoff_order"]}
     rows = []
     for debt in order_debts(debt_list, plan["strategy"]):
-        original = debt["original_balance"]
-        paid = (
-            (original - debt["balance"]) / original * 100 if original > 0 else 100
-        )
-        paid = min(100, max(0, paid))
+        paid_pct, bar_class = _paid_progress(debt)
         if debt["balance"] <= 0:
             payoff_label = "Paid off"
         else:
@@ -648,8 +657,8 @@ def _build_debt_rows(debt_list, plan):
                 "apr": f"{debt['apr']:g}%",
                 "min_payment": format_rupees(debt["min_payment"]),
                 "payoff": payoff_label,
-                "paid_pct": round(paid),
-                "bar_class": f"bar-w-{round(paid / 5) * 5}",
+                "paid_pct": paid_pct,
+                "bar_class": bar_class,
             }
         )
     return rows
@@ -823,6 +832,109 @@ def debt_settings():
     save_debt_settings(session["user_id"], *settings)
     flash("Plan updated.")
     return redirect(url_for("debts"))
+
+
+def _read_payment_form():
+    return {name: (request.form.get(name) or "").strip() for name in PAYMENT_FIELDS}
+
+
+def _validate_payment_form(form, balance):
+    """Return (payment, error); error is None when the form is valid."""
+    amount, error = _parse_number(form["amount"], "Amount")
+    if error:
+        return None, error
+    if amount <= 0:
+        return None, "Amount must be greater than zero."
+    if amount > balance:
+        return None, (
+            f"Amount can't be more than the current balance ({format_rupees(balance)})."
+        )
+    if not _is_valid_date(form["paid_on"]):
+        return None, "Please enter a valid date (YYYY-MM-DD)."
+    if len(form["note"]) > MAX_PAYMENT_NOTE_LENGTH:
+        return None, f"Note must be {MAX_PAYMENT_NOTE_LENGTH} characters or fewer."
+    return {
+        "amount": amount,
+        "paid_on": form["paid_on"],
+        "note": form["note"] or None,
+    }, None
+
+
+def _render_debt_detail(debt, form=None, error=None):
+    paid_pct, bar_class = _paid_progress(debt)
+    payments = [
+        {
+            "id": row["id"],
+            "date_label": _format_date(row["paid_on"]),
+            "note": row["note"] or "",
+            "amount": "₹{:,.2f}".format(row["amount"]),
+        }
+        for row in get_debt_payments(debt["id"], session["user_id"])
+    ]
+    if form is None:
+        form = {"amount": "", "paid_on": date.today().isoformat(), "note": ""}
+    return render_template(
+        "debt_detail.html",
+        debt={
+            "id": debt["id"],
+            "name": debt["name"],
+            "debt_type": debt["debt_type"],
+            "badge_class": "badge-" + debt["debt_type"].lower().replace(" ", "-"),
+            "original_balance": format_rupees(debt["original_balance"]),
+            "balance": format_rupees(debt["balance"]),
+            "paid_so_far": format_rupees(debt["original_balance"] - debt["balance"]),
+            "apr": f"{debt['apr']:g}%",
+            "min_payment": format_rupees(debt["min_payment"]),
+            "is_paid_off": debt["balance"] <= 0,
+            "paid_pct": paid_pct,
+            "bar_class": bar_class,
+        },
+        payments=payments,
+        form=form,
+        error=error,
+    )
+
+
+@app.route("/debts/<int:debt_id>")
+def debt_detail(debt_id):
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+    debt = get_debt(debt_id, session["user_id"])
+    if debt is None:
+        abort(404)
+    return _render_debt_detail(debt)
+
+
+@app.route("/debts/<int:debt_id>/payments", methods=["POST"])
+def log_payment(debt_id):
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+    debt = get_debt(debt_id, session["user_id"])
+    if debt is None:
+        abort(404)
+
+    form = _read_payment_form()
+    payment, error = _validate_payment_form(form, debt["balance"])
+    if error:
+        return _render_debt_detail(debt, form, error)
+
+    # The debt can vanish between the lookup above and this update.
+    if not log_debt_payment(debt_id, session["user_id"], **payment):
+        abort(404)
+    flash("Payment logged.")
+    return redirect(url_for("debt_detail", debt_id=debt_id))
+
+
+@app.route(
+    "/debts/<int:debt_id>/payments/<int:payment_id>/delete", methods=["POST"]
+)
+def delete_payment(debt_id, payment_id):
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+    if not delete_debt_payment(payment_id, debt_id, session["user_id"]):
+        abort(404)
+    flash("Payment deleted.")
+    return redirect(url_for("debt_detail", debt_id=debt_id))
 
 
 if __name__ == "__main__":
