@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Analytics — Spendly{% endblock %}
+
+{% block content %}
+<section class="profile-page">
+    <div class="profile-inner">
+
+        <section class="filter-card" aria-label="Filter by date">
+            <div class="filter-bar">
+                <nav class="filter-presets" aria-label="Quick ranges">
+                    {% for preset in presets %}
+                    <a class="filter-pill{% if preset.active %} is-active{% endif %}"
+                       href="{% if preset.start %}{{ url_for('analytics', start_date=preset.start, end_date=preset.end) }}{% else %}{{ url_for('analytics') }}{% endif %}"
+                       {% if preset.active %}aria-current="true"{% endif %}>{{ preset.label }}</a>
+                    {% endfor %}
+                </nav>
+                <span class="filter-divider" aria-hidden="true"></span>
+                <form method="get" action="{{ url_for('analytics') }}" class="filter-form">
+                    <input type="date" id="start_date" name="start_date" class="form-input" aria-label="From date" value="{{ start_date or '' }}">
+                    <span class="filter-sep">to</span>
+                    <input type="date" id="end_date" name="end_date" class="form-input" aria-label="To date" value="{{ end_date or '' }}">
+                    <button type="submit" class="filter-apply">Apply</button>
+                </form>
+            </div>
+            {% if date_error %}
+            <p class="filter-error" role="alert">{{ date_error }}</p>
+            {% endif %}
+            {% if range_label %}
+            <p class="filter-label">{{ range_label }}</p>
+            {% endif %}
+        </section>
+
+        <section class="analytics-stats" aria-label="Summary">
+            <div class="stat-card">
+                <span class="stat-label">Total spent</span>
+                <span class="stat-value">₹{{ "{:,.0f}".format(stats.total) }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Expenses</span>
+                <span class="stat-value">{{ stats.count }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Avg per expense</span>
+                <span class="stat-value">₹{{ "{:,.0f}".format(stats.avg_expense) }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Avg per month</span>
+                <span class="stat-value">₹{{ "{:,.0f}".format(stats.avg_month) }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Busiest category</span>
+                <span class="stat-value">{{ stats.busiest_category }}</span>
+            </div>
+        </section>
+
+        {% if stats.count %}
+        <section class="profile-section">
+            <h2 class="profile-section-title">Monthly Trend</h2>
+            <div class="breakdown">
+                {% for month in trend %}
+                <div class="trend-row">
+                    <span class="trend-label">{{ month.label }}</span>
+                    <div class="breakdown-track" aria-hidden="true">
+                        <div class="breakdown-fill {{ month.bar_class }}"></div>
+                    </div>
+                    <span class="trend-amount">₹{{ "{:,.0f}".format(month.amount) }}</span>
+                </div>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section class="profile-section">
+            <h2 class="profile-section-title">Largest Expenses</h2>
+            <div class="tx-table-wrap">
+                <table class="tx-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Date</th>
+                            <th scope="col">Description</th>
+                            <th scope="col">Category</th>
+                            <th scope="col" class="tx-amount">Amount</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for tx in top_expenses %}
+                        <tr>
+                            <td>{{ tx.date_label }}</td>
+                            <td>{{ tx.description }}</td>
+                            <td><span class="badge {{ tx.badge_class }}">{{ tx.category }}</span></td>
+                            <td class="tx-amount">₹{{ "{:,.2f}".format(tx.amount) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+        {% else %}
+        <p class="analytics-empty">{% if is_filtered %}No expenses in this range.{% else %}No expenses yet.{% endif %}</p>
+        {% endif %}
+
+    </div>
+</section>
+{% endblock %}

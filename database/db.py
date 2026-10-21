@@ -4,7 +4,7 @@ from datetime import date
 
 from werkzeug.security import generate_password_hash
 
-DB_PATH = os.path.join(
+DB_PATH = os.environ.get("DB_PATH") or os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "spendly.db",
 )
@@ -30,8 +30,7 @@ def get_db():
 def init_db():
     conn = get_db()
     try:
-        conn.execute(
-            """
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id            INTEGER PRIMARY KEY AUTOINCREMENT,
                 name          TEXT NOT NULL,
@@ -39,10 +38,8 @@ def init_db():
                 password_hash TEXT NOT NULL,
                 created_at    TEXT DEFAULT (datetime('now'))
             )
-            """
-        )
-        conn.execute(
-            """
+            """)
+        conn.execute("""
             CREATE TABLE IF NOT EXISTS expenses (
                 id          INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id     INTEGER NOT NULL REFERENCES users(id),
@@ -52,8 +49,7 @@ def init_db():
                 description TEXT,
                 created_at  TEXT DEFAULT (datetime('now'))
             )
-            """
-        )
+            """)
         conn.commit()
     finally:
         conn.close()
@@ -75,9 +71,7 @@ def create_user(name, email, password):
 def get_user_by_email(email):
     conn = get_db()
     try:
-        return conn.execute(
-            "SELECT * FROM users WHERE email = ?", (email,)
-        ).fetchone()
+        return conn.execute("SELECT * FROM users WHERE email = ?", (email,)).fetchone()
     finally:
         conn.close()
 
@@ -85,9 +79,7 @@ def get_user_by_email(email):
 def get_user_by_id(user_id):
     conn = get_db()
     try:
-        return conn.execute(
-            "SELECT * FROM users WHERE id = ?", (user_id,)
-        ).fetchone()
+        return conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     finally:
         conn.close()
 
@@ -163,7 +155,8 @@ def get_recent_expenses(user_id, limit=10, start_date=None, end_date=None):
     try:
         return conn.execute(
             "SELECT id, amount, category, date, description FROM expenses "
-            + where + " ORDER BY date DESC, id DESC LIMIT ?",
+            + where
+            + " ORDER BY date DESC, id DESC LIMIT ?",
             params + [limit],
         ).fetchall()
     finally:
@@ -190,8 +183,36 @@ def get_category_totals(user_id, start_date=None, end_date=None):
     try:
         return conn.execute(
             "SELECT category, SUM(amount) AS total FROM expenses "
-            + where + " GROUP BY category ORDER BY total DESC, category",
+            + where
+            + " GROUP BY category ORDER BY total DESC, category",
             params,
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def get_monthly_totals(user_id, start_date=None, end_date=None):
+    where, params = _date_clause(user_id, start_date, end_date)
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT strftime('%Y-%m', date) AS month, SUM(amount) AS total "
+            "FROM expenses " + where + " GROUP BY month ORDER BY month",
+            params,
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def get_top_expenses(user_id, limit=5, start_date=None, end_date=None):
+    where, params = _date_clause(user_id, start_date, end_date)
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT id, amount, category, date, description FROM expenses "
+            + where
+            + " ORDER BY amount DESC, date DESC, id DESC LIMIT ?",
+            params + [limit],
         ).fetchall()
     finally:
         conn.close()
