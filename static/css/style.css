@@ -1064,6 +1064,94 @@ select.form-input { cursor: pointer; }
 .bar-w-100 { width: 100%; }
 
 /* ------------------------------------------------------------------ */
+/* Debt planner                                                        */
+/* ------------------------------------------------------------------ */
+
+.debt-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+}
+
+.plan-warning {
+    background: var(--accent-2-light);
+    color: var(--accent-2);
+    border-radius: var(--radius-sm);
+    padding: 0.85rem 1.1rem;
+    font-size: 0.9rem;
+}
+
+.payoff-chart {
+    display: block;
+    width: 100%;
+    height: auto;
+}
+
+.chart-area {
+    fill-opacity: 0.85;
+    stroke: var(--paper-card);
+    stroke-width: 1;
+}
+
+.chart-axis { stroke: var(--border); }
+
+.chart-grid {
+    stroke: var(--border-soft);
+    stroke-dasharray: 3 3;
+}
+
+.chart-tick {
+    fill: var(--ink-muted);
+    font-family: var(--font-body);
+    font-size: 11px;
+}
+
+/* fill colours the SVG band; background colours the matching legend swatch. */
+.chart-series-0 { fill: var(--accent); background: var(--accent); }
+.chart-series-1 { fill: var(--accent-2); background: var(--accent-2); }
+.chart-series-2 { fill: var(--purple); background: var(--purple); }
+.chart-series-3 { fill: var(--danger); background: var(--danger); }
+.chart-series-4 { fill: var(--ink-muted); background: var(--ink-muted); }
+.chart-series-5 { fill: var(--ink-faint); background: var(--ink-faint); }
+
+.chart-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.25rem;
+    margin-top: 1rem;
+    list-style: none;
+    font-size: 0.875rem;
+    color: var(--ink-soft);
+}
+
+.chart-legend li {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.chart-swatch {
+    width: 0.75rem;
+    height: 0.75rem;
+    border-radius: 3px;
+}
+
+.debt-progress { min-width: 7rem; }
+
+.debt-progress-label {
+    display: block;
+    margin-top: 0.3rem;
+    font-size: 0.78rem;
+    color: var(--ink-muted);
+}
+
+.badge-credit-card { background: var(--danger-light); color: var(--danger); }
+.badge-personal-loan { background: var(--accent-2-light); color: var(--accent-2); }
+.badge-car-loan { background: var(--purple-light); color: var(--purple); }
+.badge-education-loan { background: var(--accent-light); color: var(--accent); }
+.badge-home-loan { background: var(--paper-warm); color: var(--ink-soft); }
+
+/* ------------------------------------------------------------------ */
 /* Footer                                                              */
 /* ------------------------------------------------------------------ */
 
@@ -1106,12 +1194,15 @@ select.form-input { cursor: pointer; }
 
     .analytics-stats { grid-template-columns: repeat(2, 1fr); }
 
+    .debt-stats { grid-template-columns: repeat(2, 1fr); }
+
     .profile-columns { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 600px) {
-    .nav-links a:not(.nav-cta):not(.nav-user):not(.nav-analytics) { display: none; }
+    .nav-links a:not(.nav-cta):not(.nav-user):not(.nav-analytics):not(.nav-debts) { display: none; }
     .analytics-stats { grid-template-columns: 1fr; }
+    .debt-stats { grid-template-columns: 1fr; }
     .hero { padding: 3rem 1rem 2rem; }
     .hero-actions { flex-direction: column; gap: 1rem; }
 

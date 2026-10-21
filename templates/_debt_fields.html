@@ -1,0 +1,50 @@
+                <div class="form-group">
+                    <label for="name">Name</label>
+                    <input type="text" id="name" name="name"
+                           class="form-input" placeholder="HDFC credit card"
+                           maxlength="60" value="{{ form.name }}" required{% if not debt_id %} autofocus{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label for="debt_type">Type</label>
+                    <select id="debt_type" name="debt_type" class="form-input" required>
+                        <option value="" disabled {% if not form.debt_type %}selected{% endif %}>Choose a type</option>
+                        {% for debt_type in debt_types %}
+                        <option value="{{ debt_type }}" {% if form.debt_type == debt_type %}selected{% endif %}>{{ debt_type }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="balance">Current balance (₹)</label>
+                    <input type="number" id="balance" name="balance"
+                           class="form-input" placeholder="0.00"
+                           step="0.01" min="0.01"
+                           value="{{ form.balance }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="apr">Interest rate (APR %)</label>
+                    <input type="number" id="apr" name="apr"
+                           class="form-input" placeholder="18"
+                           step="0.01" min="0" max="100"
+                           value="{{ form.apr }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="min_payment">Minimum monthly payment (₹)</label>
+                    <input type="number" id="min_payment" name="min_payment"
+                           class="form-input" placeholder="0.00"
+                           step="0.01" min="0.01"
+                           value="{{ form.min_payment }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="due_day">Due day of month (optional)</label>
+                    <input type="number" id="due_day" name="due_day"
+                           class="form-input" placeholder="5"
+                           step="1" min="1" max="31"
+                           value="{{ form.due_day }}">
+                </div>
+                <div class="form-group">
+                    <label for="priority">Custom priority (optional, 1 = pay first)</label>
+                    <input type="number" id="priority" name="priority"
+                           class="form-input" placeholder="1"
+                           step="1" min="1" max="99"
+                           value="{{ form.priority }}">
+                </div>
