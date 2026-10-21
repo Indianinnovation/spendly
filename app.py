@@ -25,6 +25,8 @@ from database.db import (
     get_recent_expenses,
     get_expense_summary,
     get_category_totals,
+    get_monthly_totals,
+    get_top_expenses,
     create_expense,
     get_expense,
     update_expense,
@@ -284,6 +286,72 @@ def profile():
         stats=stats,
         transactions=transactions,
         breakdown=breakdown,
+        start_date=start_date,
+        end_date=end_date,
+        date_error=date_error,
+        range_label=_range_label(start_date, end_date),
+        presets=_filter_presets(start_date, end_date),
+        is_filtered=bool(start_date or end_date),
+    )
+
+
+def _build_monthly_trend(rows):
+    peak = max((row["total"] for row in rows), default=0)
+    if peak <= 0:
+        return []
+    return [
+        {
+            "label": datetime.strptime(row["month"], "%Y-%m").strftime("%b %Y"),
+            "amount": row["total"],
+            "bar_class": f"bar-w-{max(5, round(row['total'] / peak * 100 / 5) * 5)}",
+        }
+        for row in rows
+    ]
+
+
+def _build_analytics_stats(summary, monthly_rows, category_rows):
+    total = summary["total_spent"] or 0
+    count = summary["count"]
+    active_months = len(monthly_rows)
+    return {
+        "total": total,
+        "count": count,
+        "avg_expense": total / count if count else 0,
+        "avg_month": total / active_months if active_months else 0,
+        "busiest_category": category_rows[0]["category"] if category_rows else "—",
+    }
+
+
+@app.route("/analytics")
+def analytics():
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+
+    start_date, end_date, date_error = _parse_date_range(request.args)
+    user_id = session["user_id"]
+
+    monthly_rows = get_monthly_totals(user_id, start_date, end_date)
+    stats = _build_analytics_stats(
+        get_expense_summary(user_id, start_date, end_date),
+        monthly_rows,
+        get_category_totals(user_id, start_date, end_date),
+    )
+    top_expenses = [
+        {
+            "date_label": _format_date(row["date"]),
+            "description": row["description"] or "",
+            "category": row["category"],
+            "amount": row["amount"],
+            "badge_class": f"badge-{row['category'].lower()}",
+        }
+        for row in get_top_expenses(user_id, 5, start_date, end_date)
+    ]
+
+    return render_template(
+        "analytics.html",
+        stats=stats,
+        trend=_build_monthly_trend(monthly_rows),
+        top_expenses=top_expenses,
         start_date=start_date,
         end_date=end_date,
         date_error=date_error,

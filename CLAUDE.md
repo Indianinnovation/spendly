@@ -109,8 +109,9 @@ pytest -s
 | `GET/POST /expenses/add` | Implemented — renders `add_expense.html`; POST validates and creates the expense |
 | `GET/POST /expenses/<id>/edit` | Implemented — renders `edit_expense.html` pre-filled; POST validates and updates; owner only (404 otherwise), redirects to `/login` when signed out |
 | `POST /expenses/<id>/delete` | Implemented — POST only (GET is 405); deletes the owner's expense, flashes "Expense deleted.", redirects to `/profile`; owner only (404 otherwise), redirects to `/login` when signed out |
+| `GET /analytics` | Implemented — renders `analytics.html`; stat tiles, monthly trend, 5 largest expenses; optional `start_date`/`end_date` filter; redirects to `/login` when signed out |
 
-Steps 1 (database setup), 2 (registration), 3 (login/logout) 4 (profile page UI), 7 (add expense), 8 (edit expense) and 9 (delete expense) are done. Steps 5 and 6 are not defined anywhere in the repo.
+Steps 1 (database setup), 2 (registration), 3 (login/logout) 4 (profile page UI), 7 (add expense), 8 (edit expense) 9 (delete expense) and 10 (expense analytics) are done. Steps 5 and 6 are not defined anywhere in the repo.
 
 **Do not implement a stub route unless the active task explicitly targets that step.**
 

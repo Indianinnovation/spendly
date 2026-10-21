@@ -191,6 +191,33 @@ def get_category_totals(user_id, start_date=None, end_date=None):
         conn.close()
 
 
+def get_monthly_totals(user_id, start_date=None, end_date=None):
+    where, params = _date_clause(user_id, start_date, end_date)
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT strftime('%Y-%m', date) AS month, SUM(amount) AS total "
+            "FROM expenses " + where + " GROUP BY month ORDER BY month",
+            params,
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def get_top_expenses(user_id, limit=5, start_date=None, end_date=None):
+    where, params = _date_clause(user_id, start_date, end_date)
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT id, amount, category, date, description FROM expenses "
+            + where
+            + " ORDER BY amount DESC, date DESC, id DESC LIMIT ?",
+            params + [limit],
+        ).fetchall()
+    finally:
+        conn.close()
+
+
 def seed_db():
     conn = get_db()
     try:
