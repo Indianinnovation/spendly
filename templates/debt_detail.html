@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}{{ debt.name }} — Spendly{% endblock %}
+
+{% block content %}
+<section class="profile-page">
+    <div class="profile-inner">
+
+        {% for message in get_flashed_messages() %}
+        <div class="auth-success">{{ message }}</div>
+        {% endfor %}
+
+        <p><a class="section-link" href="{{ url_for('debts') }}">← Back to planner</a></p>
+
+        <section class="profile-section">
+            <div class="section-header">
+                <h1 class="profile-section-title">{{ debt.name }}</h1>
+                <span class="badge {{ debt.badge_class }}">{{ debt.debt_type }}</span>
+            </div>
+            <div class="breakdown-track" aria-hidden="true">
+                <div class="breakdown-fill {{ debt.bar_class }}"></div>
+            </div>
+            <span class="debt-progress-label">{{ debt.paid_pct }}% paid</span>
+        </section>
+
+        <section class="debt-stats" aria-label="Summary">
+            <div class="stat-card">
+                <span class="stat-label">Original balance</span>
+                <span class="stat-value">{{ debt.original_balance }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Current balance</span>
+                <span class="stat-value">{{ debt.balance }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Paid so far</span>
+                <span class="stat-value">{{ debt.paid_so_far }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">APR · Minimum</span>
+                <span class="stat-value">{{ debt.apr }} · {{ debt.min_payment }}</span>
+            </div>
+        </section>
+
+        <div class="profile-columns">
+        <section class="profile-section">
+            <h2 class="profile-section-title">Payment History</h2>
+            <div class="tx-table-wrap">
+                <table class="tx-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Date</th>
+                            <th scope="col">Note</th>
+                            <th scope="col" class="tx-amount">Amount</th>
+                            <th scope="col" class="tx-action"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for payment in payments %}
+                        <tr>
+                            <td>{{ payment.date_label }}</td>
+                            <td>{{ payment.note }}</td>
+                            <td class="tx-amount">{{ payment.amount }}</td>
+                            <td class="tx-action">
+                                <form method="post" action="{{ url_for('delete_payment', debt_id=debt.id, payment_id=payment.id) }}" class="tx-delete-form" data-confirm="Delete this payment?">
+                                    <button type="submit" class="tx-delete-btn">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="4">No payments yet.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="profile-section">
+            <h2 class="profile-section-title">Log a Payment</h2>
+            {% if debt.is_paid_off %}
+            <p class="analytics-empty">This debt is paid off 🎉</p>
+            {% else %}
+            {% if error %}
+            <div class="auth-error">{{ error }}</div>
+            {% endif %}
+            <form method="POST" action="{{ url_for('log_payment', debt_id=debt.id) }}">
+                <div class="form-group">
+                    <label for="amount">Amount (₹)</label>
+                    <input type="number" id="amount" name="amount"
+                           class="form-input" placeholder="0.00"
+                           step="0.01" min="0.01"
+                           value="{{ form.amount }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="paid_on">Date</label>
+                    <input type="date" id="paid_on" name="paid_on"
+                           class="form-input" value="{{ form.paid_on }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="note">Note (optional)</label>
+                    <input type="text" id="note" name="note"
+                           class="form-input" maxlength="200"
+                           value="{{ form.note }}">
+                </div>
+                <button type="submit" class="btn-submit">Log payment</button>
+            </form>
+            <p class="debt-hint">Payments reduce the principal; interest already charged isn't modelled.</p>
+            {% endif %}
+        </section>
+        </div>
+
+    </div>
+</section>
+{% endblock %}

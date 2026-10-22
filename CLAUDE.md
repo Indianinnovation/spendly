@@ -13,7 +13,8 @@ expense-tracker/
 ├── requirements.txt
 ├── database/
 │   ├── __init__.py        # empty
-│   └── db.py              # SQLite helpers: get_db(), init_db(), seed_db()
+│   └── db.py              # SQLite helpers: get_db(), init_db(), seed_db(); expense, debt and debt-payment helpers
+├── planner.py             # Pure debt payoff simulation (snowball/avalanche/custom), comparison and SVG chart geometry; no Flask/SQL
 ├── templates/
 │   ├── base.html          # Shared layout (navbar, footer); blocks: title, head, content, scripts
 │   ├── landing.html       # Home page; contains the inline YouTube modal <script>
@@ -21,10 +22,14 @@ expense-tracker/
 │   ├── register.html
 │   ├── profile.html       # Profile page (identity from session user; stats/transactions are sample data)
 │   ├── terms.html
-│   └── privacy.html
+│   ├── privacy.html
+│   ├── debts.html         # Debt planner: summary tiles, strategy pills, SVG chart, debt list, comparison, settings
+│   ├── add_debt.html / edit_debt.html  # Thin wrappers around _debt_fields.html
+│   ├── _debt_fields.html  # Shared debt form fields partial
+│   └── debt_detail.html   # One debt: progress, payment history, log-payment form
 └── static/
     ├── css/style.css      # Single global stylesheet for every page (incl. landing)
-    └── js/main.js         # Vanilla JS only; currently an empty placeholder
+    └── js/main.js         # Vanilla JS only; shared confirm handler for forms with data-confirm="..."
 ```
 
 Tests live in `tests/` (pytest-flask, temporary DB via `conftest.py`). The DB file is git-ignored. `file.md` is a pasted terminal transcript, not documentation.
@@ -110,8 +115,16 @@ pytest -s
 | `GET/POST /expenses/<id>/edit` | Implemented — renders `edit_expense.html` pre-filled; POST validates and updates; owner only (404 otherwise), redirects to `/login` when signed out |
 | `POST /expenses/<id>/delete` | Implemented — POST only (GET is 405); deletes the owner's expense, flashes "Expense deleted.", redirects to `/profile`; owner only (404 otherwise), redirects to `/login` when signed out |
 | `GET /analytics` | Implemented — renders `analytics.html`; stat tiles, monthly trend, 5 largest expenses; optional `start_date`/`end_date` filter; redirects to `/login` when signed out |
+| `GET /debts` | Implemented — renders `debts.html` (planner); optional `?strategy=` preview; redirects to `/login` when signed out |
+| `GET/POST /debts/add` | Implemented — add a debt (max 50 per user); flashes "Debt added." |
+| `GET/POST /debts/<id>/edit` | Implemented — owner only (404 otherwise); flashes "Debt updated." |
+| `POST /debts/<id>/delete` | Implemented — POST only; owner only; payments cascade; flashes "Debt deleted." |
+| `POST /debts/settings` | Implemented — saves extra monthly payment and default strategy; flashes "Plan updated." |
+| `GET /debts/<id>` | Implemented — renders `debt_detail.html`; owner only (404 otherwise) |
+| `POST /debts/<id>/payments` | Implemented — logs a payment that lowers the balance; flashes "Payment logged." |
+| `POST /debts/<id>/payments/<pid>/delete` | Implemented — POST only; restores the balance (capped at the original); flashes "Payment deleted." |
 
-Steps 1 (database setup), 2 (registration), 3 (login/logout) 4 (profile page UI), 7 (add expense), 8 (edit expense) 9 (delete expense) and 10 (expense analytics) are done. Steps 5 and 6 are not defined anywhere in the repo.
+Steps 1 (database setup), 2 (registration), 3 (login/logout) 4 (profile page UI), 7 (add expense), 8 (edit expense) 9 (delete expense), 10 (expense analytics) and 11 (debt payoff planner, incl. payments) are done. Steps 5 and 6 are not defined anywhere in the repo.
 
 **Do not implement a stub route unless the active task explicitly targets that step.**
 

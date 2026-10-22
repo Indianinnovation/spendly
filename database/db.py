@@ -295,6 +295,66 @@ def save_debt_settings(user_id, extra_payment, strategy):
         conn.close()
 
 
+def log_debt_payment(debt_id, user_id, amount, paid_on, note):
+    conn = get_db()
+    try:
+        # Lower the balance and record the payment in one transaction.
+        cursor = conn.execute(
+            "UPDATE debts SET balance = MAX(0, ROUND(balance - ?, 2)) "
+            "WHERE id = ? AND user_id = ?",
+            (amount, debt_id, user_id),
+        )
+        if cursor.rowcount == 0:
+            return False
+        conn.execute(
+            "INSERT INTO debt_payments (debt_id, user_id, amount, paid_on, note) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (debt_id, user_id, amount, paid_on, note),
+        )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def get_debt_payments(debt_id, user_id):
+    conn = get_db()
+    try:
+        return conn.execute(
+            "SELECT id, amount, paid_on, note FROM debt_payments "
+            "WHERE debt_id = ? AND user_id = ? ORDER BY paid_on DESC, id DESC",
+            (debt_id, user_id),
+        ).fetchall()
+    finally:
+        conn.close()
+
+
+def delete_debt_payment(payment_id, debt_id, user_id):
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT amount FROM debt_payments "
+            "WHERE id = ? AND debt_id = ? AND user_id = ?",
+            (payment_id, debt_id, user_id),
+        ).fetchone()
+        if row is None:
+            return False
+        # Restore the balance, never above the original, and drop the payment.
+        conn.execute(
+            "UPDATE debts SET balance = MIN(original_balance, ROUND(balance + ?, 2)) "
+            "WHERE id = ? AND user_id = ?",
+            (row["amount"], debt_id, user_id),
+        )
+        conn.execute(
+            "DELETE FROM debt_payments WHERE id = ? AND debt_id = ? AND user_id = ?",
+            (payment_id, debt_id, user_id),
+        )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
 def _date_clause(user_id, start_date, end_date):
     where = "WHERE user_id = ?"
     params = [user_id]
