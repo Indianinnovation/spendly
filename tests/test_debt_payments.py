@@ -128,7 +128,7 @@ class TestDetailPage:
     def test_planner_shows_paid_off_and_links_to_detail(self, logged_in, user_id):
         debt_id = _seed(user_id)
         db.log_debt_payment(debt_id, user_id, 50000, "2026-01-15", None)
-        html = _html(logged_in.get("/debts"))
+        html = _html(logged_in.get("/debts/plan"))
         assert "<td>Paid off</td>" in html
         assert f'href="/debts/{debt_id}">Payments</a>' in html
 

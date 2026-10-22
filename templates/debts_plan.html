@@ -1,0 +1,167 @@
+{% extends "_debt_layout.html" %}
+{% from "_debt_macros.html" import area_chart %}
+
+{% block title %}Debt plan — Spendly{% endblock %}
+
+{% block debt_content %}
+        <header class="debt-greeting">
+            <h1 class="profile-name">Your payoff plan</h1>
+            <p class="profile-email">Choose a strategy, set an extra payment and compare the outcomes</p>
+        </header>
+
+        {% for name in warnings %}
+        <p class="plan-warning" role="alert">The minimum payment on {{ name }} doesn't cover its monthly interest, so its balance will grow.</p>
+        {% endfor %}
+        {% if unpayable %}
+        <p class="plan-warning" role="alert">This plan can't clear your debts within {{ max_years }} years. Raise a minimum or the extra monthly payment.</p>
+        {% endif %}
+
+        {% if has_debts %}
+        <section class="debt-stats" aria-label="Summary">
+            <div class="stat-card">
+                <span class="stat-label">Total debt</span>
+                <span class="stat-value">{{ summary.total_debt }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Debt-free date</span>
+                <span class="stat-value">{{ summary.debt_free_date }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Total interest</span>
+                <span class="stat-value">{{ summary.total_interest }}</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-label">Interest saved</span>
+                <span class="stat-value">{{ summary.interest_saved }}</span>
+            </div>
+        </section>
+
+        <section class="filter-card" aria-label="Payoff strategy">
+            <nav class="filter-presets" aria-label="Strategies">
+                {% for key, label in strategies %}
+                <a class="filter-pill{% if key == strategy %} is-active{% endif %}"
+                   href="{{ url_for('debts_plan', strategy=key) }}"
+                   {% if key == strategy %}aria-current="true"{% endif %}>{{ label }}</a>
+                {% endfor %}
+            </nav>
+            {% if custom_without_priorities %}
+            <p class="filter-label">No debt has a priority yet, so Custom follows the order you added them. Edit a debt to set its priority.</p>
+            {% endif %}
+        </section>
+
+        {% if chart %}
+        <section class="profile-section">
+            <h2 class="profile-section-title">Balance Over Time</h2>
+            {{ area_chart(chart, "Stacked chart of each debt's balance until it is paid off") }}
+        </section>
+        {% endif %}
+        {% endif %}
+
+        <section class="profile-section">
+            <div class="section-header">
+                <h2 class="profile-section-title">Your Debts</h2>
+                <a class="section-link" href="{{ url_for('add_debt') }}">Add debt</a>
+            </div>
+            {% if has_debts %}
+            <div class="tx-table-wrap">
+                <table class="tx-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Debt</th>
+                            <th scope="col">Type</th>
+                            <th scope="col" class="tx-amount">Balance</th>
+                            <th scope="col" class="tx-amount">APR</th>
+                            <th scope="col" class="tx-amount">Minimum</th>
+                            <th scope="col">Paid off by</th>
+                            <th scope="col">Progress</th>
+                            <th scope="col" class="tx-action"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for debt in debt_rows %}
+                        <tr>
+                            <td>{{ debt.name }}</td>
+                            <td><span class="badge {{ debt.badge_class }}">{{ debt.debt_type }}</span></td>
+                            <td class="tx-amount">{{ debt.balance }}</td>
+                            <td class="tx-amount">{{ debt.apr }}</td>
+                            <td class="tx-amount">{{ debt.min_payment }}</td>
+                            <td>{{ debt.payoff }}</td>
+                            <td class="debt-progress">
+                                <div class="breakdown-track" aria-hidden="true">
+                                    <div class="breakdown-fill {{ debt.bar_class }}"></div>
+                                </div>
+                                <span class="debt-progress-label">{{ debt.paid_pct }}% paid</span>
+                            </td>
+                            <td class="tx-action">
+                                <a href="{{ url_for('debt_detail', debt_id=debt.id) }}">Payments</a>
+                                <a href="{{ url_for('edit_debt', debt_id=debt.id) }}">Edit</a>
+                                <form method="post" action="{{ url_for('delete_debt', debt_id=debt.id) }}" class="tx-delete-form" data-confirm="Delete this debt?">
+                                    <button type="submit" class="tx-delete-btn">Delete</button>
+                                </form>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <p class="analytics-empty">No debts yet. <a href="{{ url_for('add_debt') }}">Add your first debt</a> to see when you'll be debt-free.</p>
+            {% endif %}
+        </section>
+
+        {% if has_debts %}
+        <div class="profile-columns">
+        <section class="profile-section">
+            <h2 class="profile-section-title">Strategy Comparison</h2>
+            <div class="tx-table-wrap">
+                <table class="tx-table">
+                    <thead>
+                        <tr>
+                            <th scope="col">Strategy</th>
+                            <th scope="col">Time</th>
+                            <th scope="col">Debt-free</th>
+                            <th scope="col" class="tx-amount">Interest</th>
+                            <th scope="col" class="tx-amount">Saved</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for row in comparison %}
+                        <tr>
+                            <td>{{ row.label }}</td>
+                            <td>{{ row.months }}</td>
+                            <td>{{ row.debt_free_date }}</td>
+                            <td class="tx-amount">{{ row.total_interest }}</td>
+                            <td class="tx-amount">{{ row.interest_saved }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <section class="profile-section">
+            <h2 class="profile-section-title">Plan Settings</h2>
+            {% if settings_error %}
+            <div class="auth-error">{{ settings_error }}</div>
+            {% endif %}
+            <form method="POST" action="{{ url_for('debt_settings') }}">
+                <div class="form-group">
+                    <label for="extra_payment">Extra monthly payment (₹)</label>
+                    <input type="number" id="extra_payment" name="extra_payment"
+                           class="form-input" step="0.01" min="0"
+                           value="{{ settings_form.extra_payment }}" required>
+                </div>
+                <div class="form-group">
+                    <label for="strategy">Default strategy</label>
+                    <select id="strategy" name="strategy" class="form-input" required>
+                        {% for key, label in strategies %}
+                        <option value="{{ key }}" {% if settings_form.strategy == key %}selected{% endif %}>{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <button type="submit" class="btn-submit">Save plan</button>
+            </form>
+        </section>
+        </div>
+        {% endif %}
+{% endblock %}

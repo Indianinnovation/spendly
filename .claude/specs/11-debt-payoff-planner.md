@@ -32,7 +32,7 @@ Delivered in two PRs on this branch's spec:
 - Step 10: Expense analytics (`stat-card`, `.bar-w-N` and `filter-pill` UI patterns)
 
 ## Routes
-- `GET /debts`: planner page — logged-in
+- `GET /debts/plan`: planner page (`/debts` is the 11b dashboard) — logged-in
   - Shows summary tiles, strategy pills, the payoff chart, the debt list with
     progress bars, the strategy comparison table and the plan settings form.
   - `?strategy=snowball|avalanche|custom` previews a strategy without saving it.
@@ -89,7 +89,7 @@ CREATE TABLE IF NOT EXISTS debt_settings (
 ### Constants
 These live in `database/db.py`, next to `CATEGORIES`:
 - `DEBT_TYPES = ["Credit Card", "Personal Loan", "Car Loan", "Education Loan", "Home Loan", "Other"]`
-- `STRATEGIES = ("snowball", "avalanche", "custom")`
+- `STRATEGIES = ("snowball", "avalanche", "custom")` (defined in `planner.py`)
 
 ### New helpers in `database/db.py`
 Every helper is scoped by `user_id` and opens and closes its own connection.
@@ -112,7 +112,7 @@ Every helper is scoped by `user_id` and opens and closes its own connection.
 
 ## Templates
 - **Create:**
-  - `templates/debts.html`: the planner page.
+  - `templates/debts_plan.html`: the planner page.
     - Flash message area.
     - Summary tiles: total debt, debt-free date, total interest, and interest
       saved compared with minimums only.
@@ -136,7 +136,7 @@ Every helper is scoped by `user_id` and opens and closes its own connection.
   signed in.
 
 ## Files to change
-- `database/db.py`: new tables in `init_db()`, `DEBT_TYPES`, `STRATEGIES`, and the debt, settings and payment helpers.
+- `database/db.py`: new tables in `init_db()`, `DEBT_TYPES`, and the debt, settings and payment helpers.
 - `app.py`:
   - All new routes.
   - Validators, each returning `(clean, error)` like `_validate_expense_form`:

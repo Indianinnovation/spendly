@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+
+{% block content %}
+<section class="profile-page">
+    <div class="debt-shell">
+
+        <aside class="debt-sidebar" aria-label="Debt planner">
+            <div class="debt-sidebar-user">
+                <span class="debt-avatar" aria-hidden="true">{{ sidebar.initials }}</span>
+                <div>
+                    <strong>{{ sidebar.name }}</strong>
+                    <span>Debt planner</span>
+                </div>
+            </div>
+            <div class="debt-date-card">
+                <span class="stat-label">Debt payoff date</span>
+                <strong>{{ sidebar.debt_free_date }}</strong>
+            </div>
+            <nav class="debt-nav" aria-label="Debt pages">
+                <a class="debt-nav-link{% if sidebar.active == 'home' %} is-active{% endif %}"
+                   href="{{ url_for('debts') }}"{% if sidebar.active == 'home' %} aria-current="page"{% endif %}>Home</a>
+                <a class="debt-nav-link{% if sidebar.active == 'plan' %} is-active{% endif %}"
+                   href="{{ url_for('debts_plan') }}"{% if sidebar.active == 'plan' %} aria-current="page"{% endif %}>Plan</a>
+                <a class="debt-nav-link" href="{{ url_for('add_debt') }}">Add debt</a>
+            </nav>
+            {% if sidebar.debts %}
+            <p class="debt-nav-heading">Track</p>
+            <nav class="debt-nav" aria-label="Your debts">
+                {% for item in sidebar.debts %}
+                {% set key = 'debt-' ~ item.id %}
+                <a class="debt-nav-link{% if sidebar.active == key %} is-active{% endif %}"
+                   href="{{ url_for('debt_detail', debt_id=item.id) }}"{% if sidebar.active == key %} aria-current="page"{% endif %}>{{ item.name }}</a>
+                {% endfor %}
+            </nav>
+            {% endif %}
+        </aside>
+
+        <div class="debt-main">
+            {% for message in get_flashed_messages() %}
+            <div class="auth-success">{{ message }}</div>
+            {% endfor %}
+            {% block debt_content %}{% endblock %}
+        </div>
+
+    </div>
+</section>
+{% endblock %}

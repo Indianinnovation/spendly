@@ -1,0 +1,64 @@
+{# Shared pieces for the debt pages: type icons, progress ring, area chart. #}
+
+{% macro debt_icon(slug) -%}
+<svg class="debt-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+    {% if slug == "credit-card" %}
+    <rect x="3" y="6" width="18" height="12" rx="2"></rect>
+    <line x1="3" y1="10" x2="21" y2="10"></line>
+    <line x1="7" y1="15" x2="11" y2="15"></line>
+    {% elif slug == "car-loan" %}
+    <path d="M5 16V12l2-4h10l2 4v4"></path>
+    <line x1="4" y1="16" x2="20" y2="16"></line>
+    <circle cx="8" cy="17" r="1.5"></circle>
+    <circle cx="16" cy="17" r="1.5"></circle>
+    {% elif slug == "home-loan" %}
+    <path d="M4 11l8-6 8 6"></path>
+    <path d="M6 10v9h12v-9"></path>
+    <path d="M10 19v-5h4v5"></path>
+    {% elif slug == "education-loan" %}
+    <path d="M2 9l10-5 10 5-10 5z"></path>
+    <path d="M6 11v4c0 1.5 2.7 3 6 3s6-1.5 6-3v-4"></path>
+    {% elif slug == "personal-loan" %}
+    <rect x="3" y="7" width="18" height="11" rx="2"></rect>
+    <circle cx="12" cy="12.5" r="2.5"></circle>
+    <path d="M7 7V5h10v2"></path>
+    {% else %}
+    <circle cx="12" cy="12" r="8"></circle>
+    <line x1="12" y1="8" x2="12" y2="13"></line>
+    <circle cx="12" cy="16" r="0.6"></circle>
+    {% endif %}
+</svg>
+{%- endmacro %}
+
+{% macro progress_ring(ring, pct, tone="") -%}
+<svg class="ring{% if tone %} ring-{{ tone }}{% endif %}" viewBox="0 0 {{ ring.size }} {{ ring.size }}"
+     role="img" aria-label="{{ pct }}% paid">
+    <circle class="ring-track" cx="{{ ring.centre }}" cy="{{ ring.centre }}" r="{{ ring.radius }}"></circle>
+    <circle class="ring-fill" cx="{{ ring.centre }}" cy="{{ ring.centre }}" r="{{ ring.radius }}"
+            stroke-dasharray="{{ ring.dash }} {{ ring.circumference }}"
+            transform="rotate(-90 {{ ring.centre }} {{ ring.centre }})"></circle>
+    <text class="ring-pct" x="{{ ring.centre }}" y="{{ ring.centre - 2 }}" text-anchor="middle">{{ pct }}%</text>
+    <text class="ring-sub" x="{{ ring.centre }}" y="{{ ring.centre + 14 }}" text-anchor="middle">paid</text>
+</svg>
+{%- endmacro %}
+
+{% macro area_chart(chart, label) -%}
+<svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="payoff-chart" role="img" aria-label="{{ label }}">
+    {% for tick in chart.y_ticks %}
+    <line class="chart-grid" x1="{{ chart.left }}" y1="{{ tick.y }}" x2="{{ chart.right }}" y2="{{ tick.y }}"></line>
+    <text class="chart-tick" x="{{ chart.left - 8 }}" y="{{ tick.y }}" text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
+    {% endfor %}
+    {% for layer in chart.layers %}
+    <polygon class="chart-area {{ layer.cls }}" points="{{ layer.points }}"></polygon>
+    {% endfor %}
+    <line class="chart-axis" x1="{{ chart.left }}" y1="{{ chart.base_y }}" x2="{{ chart.right }}" y2="{{ chart.base_y }}"></line>
+    {% for x_label in chart.x_labels %}
+    <text class="chart-tick" x="{{ x_label.x }}" y="{{ chart.label_y }}" text-anchor="{{ x_label.anchor }}">{{ x_label.label }}</text>
+    {% endfor %}
+</svg>
+<ul class="chart-legend">
+    {% for layer in chart.layers %}
+    <li><span class="chart-swatch {{ layer.cls }}" aria-hidden="true"></span>{{ layer.name }}</li>
+    {% endfor %}
+</ul>
+{%- endmacro %}

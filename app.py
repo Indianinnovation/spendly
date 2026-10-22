@@ -47,16 +47,22 @@ from database.db import (
 )
 from planner import (
     BASELINE,
+    BASELINE_LABEL,
     MAX_YEARS,
     STRATEGIES,
     STRATEGY_LABELS,
+    amortization,
     build_chart,
     compare,
+    countdown,
     format_rupees,
+    group_series,
     has_priorities,
     interest_warnings,
     order_debts,
+    progress_ring,
     simulate,
+    total_series,
 )
 
 MAX_AMOUNT = 1_000_000
@@ -68,6 +74,9 @@ MAX_DEBT_NAME_LENGTH = 60
 # so the debt count is capped to keep a request's cost bounded.
 MAX_DEBTS_PER_USER = 50
 PAYMENT_FIELDS = ("amount", "paid_on", "note")
+CHART_MODES = {"total": "Balance", "type": "By type", "debt": "By debt"}
+DETAIL_TABS = {"overview": "Progress", "amortization": "Amortization"}
+MAX_AMORTIZATION_ROWS = 360
 MAX_PAYMENT_NOTE_LENGTH = 200
 DEBT_FIELDS = (
     "name",
@@ -274,6 +283,15 @@ def _range_label(start, end):
     return None
 
 
+def _initials(name):
+    return "".join(word[0] for word in name.split()[:2]).upper() or "?"
+
+
+def _first_name(name):
+    words = name.split()
+    return words[0] if words else "there"
+
+
 @app.route("/profile")
 def profile():
     if not _is_signed_in():
@@ -320,11 +338,9 @@ def profile():
         "top_category": breakdown[0]["name"] if breakdown else "—",
     }
 
-    initials = "".join(word[0] for word in user["name"].split()[:2]).upper() or "?"
-
     return render_template(
         "profile.html",
-        initials=initials,
+        initials=_initials(user["name"]),
         member_since=_format_member_since(user["created_at"]),
         stats=stats,
         transactions=transactions,
@@ -692,17 +708,168 @@ def _build_comparison_rows(comparison):
     return rows
 
 
-def _render_planner(user_id, strategy=None, settings_form=None, settings_error=None):
+def _load_plan(user_id, strategy=None):
+    """Debts, settings and simulations shared by every debt page.
+
+    strategy previews a plan without saving it; anything unknown falls back
+    to the user's saved strategy.
+    """
     settings = get_debt_settings(user_id)
     if strategy not in STRATEGIES:
         strategy = settings["strategy"]
     debt_list = [dict(row) for row in get_debts(user_id)]
     extra = settings["extra_payment"]
-
     comparison = compare(debt_list, extra)
     by_strategy = {result["strategy"]: result for result in comparison}
     # compare() skips Custom when no debt has a priority, so simulate it here.
     plan = by_strategy.get(strategy) or simulate(debt_list, extra, strategy)
+    return {
+        "settings": settings,
+        "strategy": strategy,
+        "debts": debt_list,
+        "comparison": comparison,
+        "baseline": by_strategy[BASELINE],
+        "plan": plan,
+    }
+
+
+def _debt_free_label(plan):
+    return plan["debt_free_date"] or ("—" if plan["paid_off"] else "Not payable")
+
+
+def _duration_label(months):
+    years, months = countdown(months)
+    parts = []
+    if years:
+        parts.append(f"{years} year" + ("s" if years != 1 else ""))
+    if months or not years:
+        parts.append(f"{months} month" + ("s" if months != 1 else ""))
+    return " ".join(parts)
+
+
+def _debt_sidebar(loaded, active, user):
+    return {
+        "initials": _initials(user["name"]),
+        "name": user["name"],
+        "debt_free_date": _debt_free_label(loaded["plan"]),
+        "active": active,
+        "debts": [
+            {"id": debt["id"], "name": debt["name"]} for debt in loaded["debts"]
+        ],
+    }
+
+
+def _type_slug(debt_type):
+    return debt_type.lower().replace(" ", "-")
+
+
+def _build_type_cards(debt_list):
+    totals = {}
+    for debt in debt_list:
+        group = totals.setdefault(
+            debt["debt_type"], {"original_balance": 0.0, "balance": 0.0}
+        )
+        group["original_balance"] += debt["original_balance"]
+        group["balance"] += debt["balance"]
+    cards = []
+    for debt_type in DEBT_TYPES:
+        if debt_type not in totals:
+            continue
+        paid_pct, bar_class = _paid_progress(totals[debt_type])
+        cards.append(
+            {
+                "debt_type": debt_type,
+                "slug": _type_slug(debt_type),
+                "balance": format_rupees(totals[debt_type]["balance"]),
+                "paid_pct": paid_pct,
+                "bar_class": bar_class,
+            }
+        )
+    return cards
+
+
+def _build_timeline(loaded, mode):
+    plan = loaded["plan"]
+    if mode == "total":
+        series, names = total_series(plan["series"]), {"total": "Total balance"}
+    elif mode == "type":
+        type_of = {debt["id"]: debt["debt_type"] for debt in loaded["debts"]}
+        series = group_series(plan["series"], type_of.get)
+        names = {debt_type: debt_type for debt_type in series}
+    else:
+        series = plan["series"]
+        names = {debt["id"]: debt["name"] for debt in loaded["debts"]}
+    return build_chart(series, names, plan["labels"])
+
+
+def _build_impact(loaded):
+    plan, base = loaded["plan"], loaded["baseline"]
+    labels = max(plan["labels"], base["labels"], key=len)
+    chart = build_chart(
+        {
+            "minimums": total_series(base["series"]).get("total", []),
+            "plan": total_series(plan["series"]).get("total", []),
+        },
+        {"minimums": BASELINE_LABEL, "plan": "Your plan"},
+        labels,
+        stacked=False,
+        # Baseline in a muted colour behind the plan.
+        classes=("chart-series-4", "chart-series-0"),
+    )
+    months_saved = max(0, base["months"] - plan["months"]) if plan["paid_off"] else 0
+    return {
+        "months_saved": _duration_label(months_saved),
+        "interest_saved": format_rupees(
+            max(0, base["total_interest"] - plan["total_interest"])
+        ),
+        "chart": chart,
+    }
+
+
+def _render_home(user_id, chart_mode):
+    loaded = _load_plan(user_id)
+    debt_list, plan = loaded["debts"], loaded["plan"]
+    original = sum(debt["original_balance"] for debt in debt_list)
+    balance = sum(debt["balance"] for debt in debt_list)
+    paid_pct, _ = _paid_progress({"original_balance": original, "balance": balance})
+    paid_pct = paid_pct if original else 0
+    years, months = countdown(plan["months"])
+    user = get_user_by_id(user_id)
+    return render_template(
+        "debts.html",
+        sidebar=_debt_sidebar(loaded, "home", user),
+        has_debts=bool(debt_list),
+        first_name=_first_name(user["name"]),
+        progress={
+            "paid_pct": paid_pct,
+            "ring": progress_ring(paid_pct),
+            "principal_paid": format_rupees(original - balance),
+            "balance": format_rupees(balance),
+        },
+        countdown={
+            "paid_off": plan["paid_off"],
+            "month": (plan["debt_free_date"] or "").upper(),
+            "years": years,
+            "months": months,
+        },
+        chart_modes=list(CHART_MODES.items()),
+        chart_mode=chart_mode,
+        timeline=_build_timeline(loaded, chart_mode),
+        impact=_build_impact(loaded),
+        has_extra=loaded["settings"]["extra_payment"] > 0,
+        type_cards=_build_type_cards(debt_list),
+        warnings=interest_warnings(debt_list),
+        unpayable=bool(debt_list) and not plan["paid_off"],
+        max_years=MAX_YEARS,
+    )
+
+
+def _render_planner(user_id, strategy=None, settings_form=None, settings_error=None):
+    loaded = _load_plan(user_id, strategy)
+    settings, strategy = loaded["settings"], loaded["strategy"]
+    debt_list, plan = loaded["debts"], loaded["plan"]
+    comparison = loaded["comparison"]
+    extra = settings["extra_payment"]
     names = {debt["id"]: debt["name"] for debt in debt_list}
 
     if settings_form is None:
@@ -712,13 +879,14 @@ def _render_planner(user_id, strategy=None, settings_form=None, settings_error=N
         }
 
     return render_template(
-        "debts.html",
+        "debts_plan.html",
+        sidebar=_debt_sidebar(loaded, "plan", get_user_by_id(user_id)),
         has_debts=bool(debt_list),
         strategy=strategy,
         strategies=list(STRATEGY_LABELS.items()),
         custom_without_priorities=strategy == "custom"
         and not has_priorities(debt_list),
-        summary=_build_planner_summary(debt_list, plan, by_strategy[BASELINE]),
+        summary=_build_planner_summary(debt_list, plan, loaded["baseline"]),
         debt_rows=_build_debt_rows(debt_list, plan),
         comparison=_build_comparison_rows(comparison),
         chart=build_chart(plan["series"], names, plan["labels"]),
@@ -750,6 +918,16 @@ def _render_debt_form(template, form, error=None, debt_id=None):
 
 @app.route("/debts")
 def debts():
+    if not _is_signed_in():
+        return redirect(url_for("login"))
+    chart_mode = request.args.get("chart")
+    if chart_mode not in CHART_MODES:
+        chart_mode = "total"
+    return _render_home(session["user_id"], chart_mode)
+
+
+@app.route("/debts/plan")
+def debts_plan():
     if not _is_signed_in():
         return redirect(url_for("login"))
     return _render_planner(session["user_id"], request.args.get("strategy"))
@@ -831,7 +1009,7 @@ def debt_settings():
 
     save_debt_settings(session["user_id"], *settings)
     flash("Plan updated.")
-    return redirect(url_for("debts"))
+    return redirect(url_for("debts_plan"))
 
 
 def _read_payment_form():
@@ -860,26 +1038,56 @@ def _validate_payment_form(form, balance):
     }, None
 
 
-def _render_debt_detail(debt, form=None, error=None):
+def _build_amortization_rows(debt):
+    rows, paid_off = amortization(dict(debt))
+    schedule_complete = paid_off and len(rows) <= MAX_AMORTIZATION_ROWS
+    table = [
+        {
+            "label": row["label"],
+            "payment": format_rupees(row["payment"], 2),
+            "principal": format_rupees(row["principal"], 2),
+            "interest": format_rupees(row["interest"], 2),
+            "balance": format_rupees(row["balance"], 2),
+        }
+        for row in rows[:MAX_AMORTIZATION_ROWS]
+    ]
+    return table, schedule_complete
+
+
+def _render_debt_detail(debt, form=None, error=None, tab="overview"):
     paid_pct, bar_class = _paid_progress(debt)
+    loaded = _load_plan(session["user_id"])
     payments = [
         {
             "id": row["id"],
             "date_label": _format_date(row["paid_on"]),
             "note": row["note"] or "",
-            "amount": "₹{:,.2f}".format(row["amount"]),
+            "amount": format_rupees(row["amount"], 2),
         }
         for row in get_debt_payments(debt["id"], session["user_id"])
     ]
     if form is None:
         form = {"amount": "", "paid_on": date.today().isoformat(), "note": ""}
+    amortization_rows, schedule_complete = (
+        _build_amortization_rows(debt) if tab == "amortization" else ([], True)
+    )
     return render_template(
         "debt_detail.html",
+        sidebar=_debt_sidebar(
+            loaded, f"debt-{debt['id']}", get_user_by_id(session["user_id"])
+        ),
+        tab=tab,
+        tabs=list(DETAIL_TABS.items()),
+        ring=progress_ring(paid_pct),
+        amortization_rows=amortization_rows,
+        schedule_complete=schedule_complete,
+        max_amortization_rows=MAX_AMORTIZATION_ROWS,
         debt={
             "id": debt["id"],
             "name": debt["name"],
             "debt_type": debt["debt_type"],
-            "badge_class": "badge-" + debt["debt_type"].lower().replace(" ", "-"),
+            "badge_class": "badge-" + _type_slug(debt["debt_type"]),
+            "slug": _type_slug(debt["debt_type"]),
             "original_balance": format_rupees(debt["original_balance"]),
             "balance": format_rupees(debt["balance"]),
             "paid_so_far": format_rupees(debt["original_balance"] - debt["balance"]),
@@ -902,7 +1110,10 @@ def debt_detail(debt_id):
     debt = get_debt(debt_id, session["user_id"])
     if debt is None:
         abort(404)
-    return _render_debt_detail(debt)
+    tab = request.args.get("tab")
+    if tab not in DETAIL_TABS:
+        tab = "overview"
+    return _render_debt_detail(debt, tab=tab)
 
 
 @app.route("/debts/<int:debt_id>/payments", methods=["POST"])

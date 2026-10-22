@@ -1,190 +1,121 @@
-{% extends "base.html" %}
+{% extends "_debt_layout.html" %}
+{% from "_debt_macros.html" import debt_icon, progress_ring, area_chart %}
 
-{% block title %}Debt planner — Spendly{% endblock %}
+{% block title %}Debts — Spendly{% endblock %}
 
-{% block content %}
-<section class="profile-page">
-    <div class="profile-inner">
+{% block debt_content %}
+<header class="debt-greeting">
+    <h1 class="profile-name">Hi {{ first_name }}!</h1>
+    <p class="profile-email">Plan, track and achieve your payoff goal</p>
+</header>
 
-        {% for message in get_flashed_messages() %}
-        <div class="auth-success">{{ message }}</div>
-        {% endfor %}
+{% for name in warnings %}
+<p class="plan-warning" role="alert">The minimum payment on {{ name }} doesn't cover its monthly interest, so its balance will grow.</p>
+{% endfor %}
+{% if unpayable %}
+<p class="plan-warning" role="alert">This plan can't clear your debts within {{ max_years }} years. Raise a minimum or the extra monthly payment.</p>
+{% endif %}
 
-        {% for name in warnings %}
-        <p class="plan-warning" role="alert">The minimum payment on {{ name }} doesn't cover its monthly interest, so its balance will grow.</p>
-        {% endfor %}
-        {% if unpayable %}
-        <p class="plan-warning" role="alert">This plan can't clear your debts within {{ max_years }} years. Raise a minimum or the extra monthly payment.</p>
-        {% endif %}
-
-        {% if has_debts %}
-        <section class="debt-stats" aria-label="Summary">
-            <div class="stat-card">
-                <span class="stat-label">Total debt</span>
-                <span class="stat-value">{{ summary.total_debt }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Debt-free date</span>
-                <span class="stat-value">{{ summary.debt_free_date }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Total interest</span>
-                <span class="stat-value">{{ summary.total_interest }}</span>
-            </div>
-            <div class="stat-card">
-                <span class="stat-label">Interest saved</span>
-                <span class="stat-value">{{ summary.interest_saved }}</span>
-            </div>
-        </section>
-
-        <section class="filter-card" aria-label="Payoff strategy">
-            <nav class="filter-presets" aria-label="Strategies">
-                {% for key, label in strategies %}
-                <a class="filter-pill{% if key == strategy %} is-active{% endif %}"
-                   href="{{ url_for('debts', strategy=key) }}"
-                   {% if key == strategy %}aria-current="true"{% endif %}>{{ label }}</a>
-                {% endfor %}
-            </nav>
-            {% if custom_without_priorities %}
-            <p class="filter-label">No debt has a priority yet, so Custom follows the order you added them. Edit a debt to set its priority.</p>
-            {% endif %}
-        </section>
-
-        {% if chart %}
-        <section class="profile-section">
-            <h2 class="profile-section-title">Balance Over Time</h2>
-            <svg viewBox="0 0 {{ chart.width }} {{ chart.height }}" class="payoff-chart"
-                 role="img" aria-label="Stacked chart of each debt's balance until it is paid off">
-                {% for tick in chart.y_ticks %}
-                <line class="chart-grid" x1="{{ chart.left }}" y1="{{ tick.y }}" x2="{{ chart.right }}" y2="{{ tick.y }}"></line>
-                <text class="chart-tick" x="{{ chart.left - 8 }}" y="{{ tick.y }}" text-anchor="end" dominant-baseline="middle">{{ tick.label }}</text>
-                {% endfor %}
-                {% for layer in chart.layers %}
-                <polygon class="chart-area {{ layer.cls }}" points="{{ layer.points }}"></polygon>
-                {% endfor %}
-                <line class="chart-axis" x1="{{ chart.left }}" y1="{{ chart.base_y }}" x2="{{ chart.right }}" y2="{{ chart.base_y }}"></line>
-                {% for label in chart.x_labels %}
-                <text class="chart-tick" x="{{ label.x }}" y="{{ chart.label_y }}" text-anchor="{{ label.anchor }}">{{ label.label }}</text>
-                {% endfor %}
-            </svg>
-            <ul class="chart-legend">
-                {% for layer in chart.layers %}
-                <li><span class="chart-swatch {{ layer.cls }}" aria-hidden="true"></span>{{ layer.name }}</li>
-                {% endfor %}
-            </ul>
-        </section>
-        {% endif %}
-        {% endif %}
-
-        <section class="profile-section">
-            <div class="section-header">
-                <h2 class="profile-section-title">Your Debts</h2>
-                <a class="section-link" href="{{ url_for('add_debt') }}">Add debt</a>
-            </div>
-            {% if has_debts %}
-            <div class="tx-table-wrap">
-                <table class="tx-table">
-                    <thead>
-                        <tr>
-                            <th scope="col">Debt</th>
-                            <th scope="col">Type</th>
-                            <th scope="col" class="tx-amount">Balance</th>
-                            <th scope="col" class="tx-amount">APR</th>
-                            <th scope="col" class="tx-amount">Minimum</th>
-                            <th scope="col">Paid off by</th>
-                            <th scope="col">Progress</th>
-                            <th scope="col" class="tx-action"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for debt in debt_rows %}
-                        <tr>
-                            <td>{{ debt.name }}</td>
-                            <td><span class="badge {{ debt.badge_class }}">{{ debt.debt_type }}</span></td>
-                            <td class="tx-amount">{{ debt.balance }}</td>
-                            <td class="tx-amount">{{ debt.apr }}</td>
-                            <td class="tx-amount">{{ debt.min_payment }}</td>
-                            <td>{{ debt.payoff }}</td>
-                            <td class="debt-progress">
-                                <div class="breakdown-track" aria-hidden="true">
-                                    <div class="breakdown-fill {{ debt.bar_class }}"></div>
-                                </div>
-                                <span class="debt-progress-label">{{ debt.paid_pct }}% paid</span>
-                            </td>
-                            <td class="tx-action">
-                                <a href="{{ url_for('debt_detail', debt_id=debt.id) }}">Payments</a>
-                                <a href="{{ url_for('edit_debt', debt_id=debt.id) }}">Edit</a>
-                                <form method="post" action="{{ url_for('delete_debt', debt_id=debt.id) }}" class="tx-delete-form" data-confirm="Delete this debt?">
-                                    <button type="submit" class="tx-delete-btn">Delete</button>
-                                </form>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <p class="analytics-empty">No debts yet. <a href="{{ url_for('add_debt') }}">Add your first debt</a> to see when you'll be debt-free.</p>
-            {% endif %}
-        </section>
-
-        {% if has_debts %}
-        <div class="profile-columns">
-        <section class="profile-section">
-            <h2 class="profile-section-title">Strategy Comparison</h2>
-            <div class="tx-table-wrap">
-                <table class="tx-table">
-                    <thead>
-                        <tr>
-                            <th scope="col">Strategy</th>
-                            <th scope="col">Time</th>
-                            <th scope="col">Debt-free</th>
-                            <th scope="col" class="tx-amount">Interest</th>
-                            <th scope="col" class="tx-amount">Saved</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for row in comparison %}
-                        <tr>
-                            <td>{{ row.label }}</td>
-                            <td>{{ row.months }}</td>
-                            <td>{{ row.debt_free_date }}</td>
-                            <td class="tx-amount">{{ row.total_interest }}</td>
-                            <td class="tx-amount">{{ row.interest_saved }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-        </section>
-
-        <section class="profile-section">
-            <h2 class="profile-section-title">Plan Settings</h2>
-            {% if settings_error %}
-            <div class="auth-error">{{ settings_error }}</div>
-            {% endif %}
-            <form method="POST" action="{{ url_for('debt_settings') }}">
-                <div class="form-group">
-                    <label for="extra_payment">Extra monthly payment (₹)</label>
-                    <input type="number" id="extra_payment" name="extra_payment"
-                           class="form-input" step="0.01" min="0"
-                           value="{{ settings_form.extra_payment }}" required>
+{% if has_debts %}
+<div class="debt-hero">
+    <section class="profile-section payoff-card" aria-label="Payoff progress">
+        <h2 class="profile-section-title">Payoff progress</h2>
+        <div class="payoff-progress">
+            {{ progress_ring(progress.ring, progress.paid_pct) }}
+            <dl class="payoff-figures">
+                <div>
+                    <dt>Principal paid</dt>
+                    <dd class="amount-good">{{ progress.principal_paid }}</dd>
                 </div>
-                <div class="form-group">
-                    <label for="strategy">Default strategy</label>
-                    <select id="strategy" name="strategy" class="form-input" required>
-                        {% for key, label in strategies %}
-                        <option value="{{ key }}" {% if settings_form.strategy == key %}selected{% endif %}>{{ label }}</option>
-                        {% endfor %}
-                    </select>
+                <div>
+                    <dt>Balance</dt>
+                    <dd class="amount-bad">{{ progress.balance }}</dd>
                 </div>
-                <button type="submit" class="btn-submit">Save plan</button>
-            </form>
-        </section>
+            </dl>
         </div>
-        {% endif %}
+    </section>
 
+    <section class="countdown-card" aria-label="Debt-free countdown">
+        <p class="countdown-eyebrow">Debt-free countdown</p>
+        {% if countdown.paid_off %}
+        <p class="countdown-month">{{ countdown.month }}</p>
+        <div class="countdown-figures">
+            <div><strong>{{ countdown.years }}</strong><span>years</span></div>
+            <div><strong>{{ countdown.months }}</strong><span>months</span></div>
+        </div>
+        {% else %}
+        <p class="countdown-month">Not payable at current payments</p>
+        {% endif %}
+        <svg class="countdown-art" viewBox="0 0 160 110" aria-hidden="true" focusable="false">
+            <circle class="art-sun" cx="92" cy="46" r="22"></circle>
+            {% for angle in [0, 45, 90, 135, 180, 225, 270, 315] %}
+            <line class="art-ray" x1="92" y1="14" x2="92" y2="6" transform="rotate({{ angle }} 92 46)"></line>
+            {% endfor %}
+            <path class="art-cloud" d="M60 96a16 16 0 0 1 4-31 22 22 0 0 1 42-4 18 18 0 0 1 30 14 14 14 0 0 1-2 21z"></path>
+        </svg>
+    </section>
+</div>
+
+<section class="profile-section">
+    <div class="section-header">
+        <h2 class="profile-section-title">Payoff timeline</h2>
+        <nav class="chart-tabs" aria-label="Chart view">
+            {% for key, label in chart_modes %}
+            <a class="chart-tab{% if key == chart_mode %} is-active{% endif %}"
+               href="{{ url_for('debts', chart=key) }}"
+               {% if key == chart_mode %}aria-current="true"{% endif %}>{{ label }}</a>
+            {% endfor %}
+        </nav>
+    </div>
+    {% if timeline %}
+    {{ area_chart(timeline, "Debt balance over time") }}
+    {% endif %}
+</section>
+
+<section class="profile-section">
+    <h2 class="profile-section-title">Planned extra payments impact</h2>
+    <dl class="impact-figures">
+        <div>
+            <dt>Payoff accelerated</dt>
+            <dd>{{ impact.months_saved }}</dd>
+        </div>
+        <div>
+            <dt>Interest saved</dt>
+            <dd>{{ impact.interest_saved }}</dd>
+        </div>
+    </dl>
+    {% if not has_extra %}
+    <p class="debt-hint">Add an extra monthly payment on the <a href="{{ url_for('debts_plan') }}">Plan</a> page to see how much sooner you could be debt-free.</p>
+    {% endif %}
+    {% if impact.chart %}
+    {{ area_chart(impact.chart, "Total balance with minimum payments only compared with your plan") }}
+    {% endif %}
+</section>
+
+<section class="profile-section">
+    <h2 class="profile-section-title">Progress by type</h2>
+    <div class="type-cards">
+        {% for card in type_cards %}
+        <article class="type-card type-{{ card.slug }}">
+            <div class="type-card-head">
+                <span class="type-icon">{{ debt_icon(card.slug) }}</span>
+                <h3 class="type-card-title">{{ card.debt_type }}</h3>
+                <span class="balance-bubble">Balance {{ card.balance }}</span>
+            </div>
+            <div class="type-card-bar">
+                <span class="type-card-label">Payoff progress</span>
+                <div class="breakdown-track" aria-hidden="true">
+                    <div class="breakdown-fill {{ card.bar_class }}"></div>
+                </div>
+                <span class="type-card-pct">{{ card.paid_pct }}%</span>
+            </div>
+        </article>
+        {% endfor %}
     </div>
 </section>
+{% else %}
+<section class="profile-section">
+    <p class="analytics-empty">No debts yet. <a href="{{ url_for('add_debt') }}">Add your first debt</a> to see when you'll be debt-free.</p>
+</section>
+{% endif %}
 {% endblock %}
-

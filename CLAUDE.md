@@ -23,10 +23,13 @@ expense-tracker/
 │   ├── profile.html       # Profile page (identity from session user; stats/transactions are sample data)
 │   ├── terms.html
 │   ├── privacy.html
-│   ├── debts.html         # Debt planner: summary tiles, strategy pills, SVG chart, debt list, comparison, settings
+│   ├── _debt_layout.html  # Sidebar layout shared by the debt pages (extends base.html)
+│   ├── _debt_macros.html  # debt_icon, progress_ring and area_chart macros
+│   ├── debts.html         # Debt home: greeting, progress ring, countdown, timeline tabs, extra-payment impact, progress by type
+│   ├── debts_plan.html    # Debt plan: summary tiles, strategy pills, chart, debt list, comparison, settings
 │   ├── add_debt.html / edit_debt.html  # Thin wrappers around _debt_fields.html
 │   ├── _debt_fields.html  # Shared debt form fields partial
-│   └── debt_detail.html   # One debt: progress, payment history, log-payment form
+│   └── debt_detail.html   # One debt: progress ring, Progress tab (history + log form), Amortization tab
 └── static/
     ├── css/style.css      # Single global stylesheet for every page (incl. landing)
     └── js/main.js         # Vanilla JS only; shared confirm handler for forms with data-confirm="..."
@@ -115,12 +118,13 @@ pytest -s
 | `GET/POST /expenses/<id>/edit` | Implemented — renders `edit_expense.html` pre-filled; POST validates and updates; owner only (404 otherwise), redirects to `/login` when signed out |
 | `POST /expenses/<id>/delete` | Implemented — POST only (GET is 405); deletes the owner's expense, flashes "Expense deleted.", redirects to `/profile`; owner only (404 otherwise), redirects to `/login` when signed out |
 | `GET /analytics` | Implemented — renders `analytics.html`; stat tiles, monthly trend, 5 largest expenses; optional `start_date`/`end_date` filter; redirects to `/login` when signed out |
-| `GET /debts` | Implemented — renders `debts.html` (planner); optional `?strategy=` preview; redirects to `/login` when signed out |
+| `GET /debts` | Implemented — renders `debts.html` (dashboard); optional `?chart=total\|type\|debt`; redirects to `/login` when signed out |
+| `GET /debts/plan` | Implemented — renders `debts_plan.html`; optional `?strategy=` preview; redirects to `/login` when signed out |
 | `GET/POST /debts/add` | Implemented — add a debt (max 50 per user); flashes "Debt added." |
 | `GET/POST /debts/<id>/edit` | Implemented — owner only (404 otherwise); flashes "Debt updated." |
 | `POST /debts/<id>/delete` | Implemented — POST only; owner only; payments cascade; flashes "Debt deleted." |
-| `POST /debts/settings` | Implemented — saves extra monthly payment and default strategy; flashes "Plan updated." |
-| `GET /debts/<id>` | Implemented — renders `debt_detail.html`; owner only (404 otherwise) |
+| `POST /debts/settings` | Implemented — saves extra monthly payment and default strategy; flashes "Plan updated.", redirects to `/debts/plan` |
+| `GET /debts/<id>` | Implemented — renders `debt_detail.html`; optional `?tab=amortization`; owner only (404 otherwise) |
 | `POST /debts/<id>/payments` | Implemented — logs a payment that lowers the balance; flashes "Payment logged." |
 | `POST /debts/<id>/payments/<pid>/delete` | Implemented — POST only; restores the balance (capped at the original); flashes "Payment deleted." |
 

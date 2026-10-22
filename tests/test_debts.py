@@ -151,9 +151,9 @@ def test_strategy_changes_payoff_order(logged_in, user_id):
         min_payment=500,
         priority=1,
     )
-    snow = _html(logged_in.get("/debts", query_string={"strategy": "snowball"}))
-    aval = _html(logged_in.get("/debts", query_string={"strategy": "avalanche"}))
-    custom = _html(logged_in.get("/debts", query_string={"strategy": "custom"}))
+    snow = _html(logged_in.get("/debts/plan", query_string={"strategy": "snowball"}))
+    aval = _html(logged_in.get("/debts/plan", query_string={"strategy": "avalanche"}))
+    custom = _html(logged_in.get("/debts/plan", query_string={"strategy": "custom"}))
     # The debt table lists debts in the order the strategy pays them.
     assert snow.index("<td>SmallLowApr</td>") < snow.index("<td>BigHighApr</td>")
     assert aval.index("<td>BigHighApr</td>") < aval.index("<td>SmallLowApr</td>")
@@ -418,7 +418,7 @@ def test_settings_valid_persists_and_flashes(logged_in, user_id):
         data={"extra_payment": "5000", "strategy": "snowball"},
     )
     assert response.status_code == 302
-    assert response.headers["Location"] == "/debts"
+    assert response.headers["Location"] == "/debts/plan"
     settings = db.get_debt_settings(user_id)
     assert settings["extra_payment"] == 5000.0
     assert settings["strategy"] == "snowball"
@@ -438,7 +438,7 @@ def test_settings_value_shown_on_page_after_save(logged_in, user_id):
     logged_in.post(
         "/debts/settings", data={"extra_payment": "5000", "strategy": "avalanche"}
     )
-    html = _html(logged_in.get("/debts"))
+    html = _html(logged_in.get("/debts/plan"))
     assert 'value="5000.00"' in html
 
 
@@ -503,15 +503,15 @@ def test_session_cookie_is_lax_and_httponly(client, app):
 
 def test_custom_without_priorities_shows_hint(logged_in, user_id):
     _seed(user_id, priority=None)
-    html = _html(logged_in.get("/debts", query_string={"strategy": "custom"}))
+    html = _html(logged_in.get("/debts/plan", query_string={"strategy": "custom"}))
     assert "No debt has a priority yet" in html
-    html = _html(logged_in.get("/debts", query_string={"strategy": "snowball"}))
+    html = _html(logged_in.get("/debts/plan", query_string={"strategy": "snowball"}))
     assert "No debt has a priority yet" not in html
 
 
 def test_delete_forms_use_shared_confirm(logged_in, user_id):
     _seed(user_id)
-    html = _html(logged_in.get("/debts"))
+    html = _html(logged_in.get("/debts/plan"))
     assert 'data-confirm="Delete this debt?"' in html
     assert "confirm(" not in html
 

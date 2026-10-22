@@ -35,8 +35,8 @@ def order_debts(debts, strategy):
     return list(debts)
 
 
-def format_rupees(amount):
-    return "₹{:,.0f}".format(amount)
+def format_rupees(amount, decimals=0):
+    return f"₹{amount:,.{decimals}f}"
 
 
 def monthly_interest(debt):
@@ -70,6 +70,7 @@ def simulate(debts, extra, strategy, start=None, max_months=MAX_MONTHS):
     ordered = [debt for debt in order_debts(debts, strategy) if debt["balance"] > 0]
     balances = {debt["id"]: round(debt["balance"], 2) for debt in ordered}
     series = {debt["id"]: [balances[debt["id"]]] for debt in ordered}
+    schedule = {debt["id"]: [] for debt in ordered}
     labels = [_month_label(start, 0)]
     payoff_order = []
     freed = 0.0
@@ -80,6 +81,8 @@ def simulate(debts, extra, strategy, start=None, max_months=MAX_MONTHS):
     while any(balances.values()) and month < max_months:
         month += 1
         pool = extra + freed if rollover else 0.0
+        paid = {}
+        charged = {}
 
         for debt in ordered:
             balance = balances[debt["id"]]
@@ -89,6 +92,8 @@ def simulate(debts, extra, strategy, start=None, max_months=MAX_MONTHS):
             balance += interest
             payment = min(debt["min_payment"], balance)
             balances[debt["id"]] = round(balance - payment, 2)
+            paid[debt["id"]] = payment
+            charged[debt["id"]] = interest
             total_interest += interest
             total_paid += payment
             if rollover:
@@ -103,6 +108,7 @@ def simulate(debts, extra, strategy, start=None, max_months=MAX_MONTHS):
                 continue
             payment = min(pool, balance)
             balances[debt["id"]] = round(balance - payment, 2)
+            paid[debt["id"]] = paid.get(debt["id"], 0.0) + payment
             pool -= payment
             total_paid += payment
 
@@ -121,6 +127,18 @@ def simulate(debts, extra, strategy, start=None, max_months=MAX_MONTHS):
                 )
                 freed += debt["min_payment"]
             series[debt["id"]].append(balances[debt["id"]])
+            if debt["id"] in paid:
+                payment = round(paid[debt["id"]], 2)
+                interest = charged[debt["id"]]
+                schedule[debt["id"]].append(
+                    {
+                        "label": _month_label(start, month),
+                        "payment": payment,
+                        "interest": interest,
+                        "principal": round(payment - interest, 2),
+                        "balance": balances[debt["id"]],
+                    }
+                )
         labels.append(_month_label(start, month))
 
     paid_off = not any(balances.values())
@@ -133,9 +151,53 @@ def simulate(debts, extra, strategy, start=None, max_months=MAX_MONTHS):
         "total_paid": round(total_paid, 2),
         "payoff_order": payoff_order,
         "series": series,
+        "schedule": schedule,
         "labels": labels,
         "paid_off": paid_off,
     }
+
+
+def amortization(debt, start=None):
+    """Month-by-month rows for one debt paid at its own minimum."""
+    result = simulate([debt], 0, BASELINE, start)
+    return result["schedule"].get(debt["id"], []), result["paid_off"]
+
+
+def countdown(months):
+    """Split a month count into (years, months)."""
+    return divmod(months, 12)
+
+
+def progress_ring(pct, radius=36):
+    """Geometry for an SVG progress ring drawn with stroke-dasharray."""
+    circumference = round(2 * math.pi * radius, 2)
+    pct = min(100, max(0, pct))
+    return {
+        "radius": radius,
+        "size": radius * 2 + 16,
+        "centre": radius + 8,
+        "circumference": circumference,
+        "dash": round(circumference * pct / 100, 2),
+    }
+
+
+def total_series(series):
+    """Sum every debt's balance month by month into one series."""
+    if not series:
+        return {}
+    return {"total": [round(sum(month), 2) for month in zip(*series.values())]}
+
+
+def group_series(series, key_of):
+    """Sum debt series into groups, e.g. by debt type; keeps first-seen order."""
+    grouped = {}
+    for debt_id, values in series.items():
+        key = key_of(debt_id)
+        if key in grouped:
+            grouped[key] = [round(a + b, 2) for a, b in zip(grouped[key], values)]
+        else:
+            grouped[key] = list(values)
+    return grouped
 
 
 def has_priorities(debts):
@@ -157,11 +219,31 @@ def compare(debts, extra, start=None):
     return results
 
 
-def build_chart(series, names, labels, width=600, height=240, max_points=120):
-    """Stacked-area chart geometry for an inline <svg>, or None if empty."""
+def build_chart(
+    series,
+    names,
+    labels,
+    width=600,
+    height=240,
+    max_points=120,
+    stacked=True,
+    classes=None,
+):
+    """Area chart geometry for an inline <svg>, or None if empty.
+
+    Stacked layers sit on top of each other; overlaid layers (stacked=False)
+    each start from the baseline. Shorter series are padded with zeros.
+    `classes` optionally gives one CSS class per layer, in series order.
+    """
     if not series:
         return None
-    count = len(next(iter(series.values())))
+    count = max(len(values) for values in series.values())
+    if not count:
+        return None
+    series = {
+        key: list(values) + [0.0] * (count - len(values))
+        for key, values in series.items()
+    }
     step = max(1, math.ceil(count / max_points))
     columns = list(range(0, count, step))
     if columns[-1] != count - 1:
@@ -175,9 +257,13 @@ def build_chart(series, names, labels, width=600, height=240, max_points=120):
     stacks = []
     running = [0.0] * len(columns)
     for debt_id in series:
-        running = [total + series[debt_id][col] for total, col in zip(running, columns)]
-        stacks.append(running)
-    peak = max(stacks[-1]) or 1.0
+        values = [series[debt_id][col] for col in columns]
+        if stacked:
+            running = [total + value for total, value in zip(running, values)]
+            stacks.append(running)
+        else:
+            stacks.append(values)
+    peak = max(max(stack) for stack in stacks) or 1.0
 
     span = max(1, len(columns) - 1)
     xs = [round(left + plot_w * i / span, 1) for i in range(len(columns))]
@@ -194,10 +280,15 @@ def build_chart(series, names, labels, width=600, height=240, max_points=120):
             {
                 "name": names.get(debt_id, ""),
                 "points": " ".join(upper + lower),
-                "cls": f"chart-series-{index % CHART_SERIES}",
+                "cls": (
+                    classes[index]
+                    if classes
+                    else f"chart-series-{index % CHART_SERIES}"
+                ),
             }
         )
-        below = stack
+        if stacked:
+            below = stack
 
     y_ticks = [
         {"y": y(peak * k / 3), "label": format_rupees(peak * k / 3)}
